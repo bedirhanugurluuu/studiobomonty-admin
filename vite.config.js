@@ -12,11 +12,6 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     cssCodeSplit: false, // CSS'i tek dosyada tut
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: false, // Console.log'ları koru (debug için)
-      },
-    },
+    minify: 'esbuild', // Terser yerine esbuild kullan (daha hızlı ve varsayılan)
   }
 })
