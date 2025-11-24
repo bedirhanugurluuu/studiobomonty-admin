@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "./index.html",
     "./src/**/*.{js,jsx,ts,tsx}",
+    // DaisyUI'nin tüm dosyalarını da tarayalım (optional - genelde gerekmez)
   ],
   theme: {
     extend: {},
@@ -19,6 +20,9 @@ module.exports = {
     styled: true, // DaisyUI styled components'ı ekle
     utils: true, // DaisyUI utility classes'ı ekle
     logs: false, // DaisyUI log'larını kapat
+    rtl: false, // RTL desteği kapalı
+    prefix: "", // Prefix yok
+    darkTheme: "dark", // Dark theme
   },
   // DaisyUI class'larının purge edilmemesi için safelist
   safelist: [
