@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* DaisyUI CSS'inin korunması için - production build'inde purge edilmemesi için */
+@layer components {
+  /* Menu component styles - DaisyUI'nin base CSS'ini koru */
+  .menu :where(li:not(.menu-title) > *:not(ul, details, .menu-title, .btn)),
+  .menu :where(li:not(.menu-title) > details > summary:not(.menu-title)) {
+    display: grid;
+    grid-auto-flow: column;
+    align-content: flex-start;
+    align-items: center;
+    gap: calc(0.25rem * 2);
+    border-radius: var(--radius-field);
+    padding-inline: calc(0.25rem * 3);
+    padding-block: calc(0.25rem * 1.5);
+    text-align: start;
+    transition-property: color, background-color, box-shadow;
+    transition-duration: 0.2s;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    grid-auto-columns: minmax(auto, max-content) auto max-content;
+    text-wrap: balance;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+}
+
 .input {
   @apply w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500;
 }

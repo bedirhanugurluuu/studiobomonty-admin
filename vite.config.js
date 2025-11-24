@@ -13,5 +13,17 @@ export default defineConfig({
     sourcemap: true,
     cssCodeSplit: false, // CSS'i tek dosyada tut
     minify: 'esbuild', // Terser yerine esbuild kullan (daha hızlı ve varsayılan)
+    cssMinify: 'esbuild', // CSS minify için esbuild kullan
+    rollupOptions: {
+      output: {
+        // CSS'in optimize edilmesini kontrol et
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'index.css') {
+            return 'assets/[name].[ext]';
+          }
+          return 'assets/[name]-[hash].[ext]';
+        },
+      },
+    },
   }
 })
