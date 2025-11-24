@@ -54,12 +54,16 @@ const getApiConfig = () => {
 
 // Merkezi API base URL - Always ensure absolute URL
 const apiConfig = getApiConfig();
-let apiBaseUrl = `${apiConfig.baseURL}${apiConfig.apiPath}`;
+// baseURL'in sonundaki slash'ı temizle
+const cleanBaseURL = apiConfig.baseURL.replace(/\/+$/, '');
+// apiPath'in başındaki slash'ı temizle (zaten /api olarak tanımlı)
+const cleanApiPath = apiConfig.apiPath.replace(/^\/+/, '/');
+let apiBaseUrl = `${cleanBaseURL}${cleanApiPath}`;
 
 // Ensure it's an absolute URL (starts with http:// or https://)
 if (!apiBaseUrl.startsWith('http://') && !apiBaseUrl.startsWith('https://')) {
   // Fallback to localhost:3000 if somehow relative
-  apiBaseUrl = `http://localhost:3000${apiConfig.apiPath}`;
+  apiBaseUrl = `http://localhost:3000${cleanApiPath}`;
   console.warn('API_BASE_URL was relative, using fallback:', apiBaseUrl);
 }
 

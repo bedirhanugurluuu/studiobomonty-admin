@@ -10,6 +10,13 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    cssCodeSplit: false, // CSS'i tek dosyada tut
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false, // Console.log'ları koru (debug için)
+      },
+    },
   }
 })
