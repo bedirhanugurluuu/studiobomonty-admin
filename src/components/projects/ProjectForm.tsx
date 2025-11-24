@@ -1,6 +1,10 @@
 import React, { useEffect, useState, ChangeEvent } from "react";
-import axiosInstance from "../../utils/axiosInstance";
+import { useNavigate } from "react-router-dom";
+import { api } from "../../utils/api";
+import { storageUtils } from "../../utils/supabaseStorage";
 import Swal from "sweetalert2";
+import { FormLayout } from "../common/PageLayout";
+import { FormInput, FormTextarea, FormFileInput, FormCheckbox, FormButton, FormActions } from "../common/FormComponents";
 
 interface ProjectResponse {
   id: number;
@@ -10,14 +14,13 @@ interface ProjectResponse {
   description: string;
   external_link: string;
   client_name: string;
-  year: string;
-  role: string;
-  thumbnail_image: string;
-  video_url?: string | null;
+  tab1: string;
+  tab2: string;
   featured_order: number;
 }
 
 const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
+  const navigate = useNavigate();
   // Form state
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -25,56 +28,15 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
   const [description, setDescription] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [clientName, setClientName] = useState("");
-  const [year, setYear] = useState("");
-  const [role, setRole] = useState("");
+  const [tab1, setTab1] = useState("");
+  const [tab2, setTab2] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
   const [featuredOrder, setFeaturedOrder] = useState<string>("");
-  const [thumbnailMedia, setThumbnailMedia] = useState<File | null>(null);
   const [bannerMedia, setBannerMedia] = useState<File | null>(null);
-  const [videoUrl, setVideoUrl] = useState("");
-
-
-
-  const inputStyle = {
-    width: "100%",
-    padding: "0.5rem",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    fontSize: "1rem",
-    boxSizing: "border-box" as const,
-  };
-
-  const labelStyle = {
-    fontWeight: "bold",
-    display: "block",
-    marginBottom: "0.25rem",
-  };
-
-  const buttonStyle = {
-    padding: "0.5rem 1rem",
-    backgroundColor: "#2563eb", // Tailwind blue-600
-    color: "white",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    marginTop: "1rem",
-  };
 
   // Dosya inputları için handlerlar
-  const handleThumbnailChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setThumbnailMedia(e.target.files[0]);
-    }
-  };
-
-  const handleBannerChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setBannerMedia(e.target.files[0]);
-    }
-  };
-
-  const handleFeaturedOrderChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setFeaturedOrder(e.target.value);
+  const handleBannerChange = (file: File | null) => {
+    setBannerMedia(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,33 +51,80 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
       return;
     }
 
-    try {
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("subtitle", subtitle);
-      formData.append("slug", slug);
-      formData.append("description", description);
-      formData.append("external_link", externalLink);
-      formData.append("client_name", clientName);
-      formData.append("year", year);
-      formData.append("role", role);
-      formData.append("is_featured", isFeatured ? "1" : "0");
-      if (featuredOrder.trim() !== "") {
-        formData.append("featured_order", featuredOrder);
+    // Featured proje sayısını kontrol et
+    if (isFeatured) {
+      try {
+        const { data: existingProjects, error: getError } = await api.projects.getAll();
+        if (getError) throw getError;
+        
+        if (existingProjects) {
+          const featuredCount = existingProjects.filter(p => p.is_featured).length;
+          
+          // Eğer bu proje zaten featured ise sayıyı azalt
+          const currentProject = existingProjects.find(p => p.slug === slug);
+          const adjustedCount = currentProject && currentProject.is_featured ? featuredCount - 1 : featuredCount;
+          
+          if (adjustedCount >= 4) {
+            const result = await Swal.fire({
+              icon: "warning",
+              title: "Uyarı!",
+              text: `Şu anda ${adjustedCount} featured proje var. Anasayfada sadece 4 featured proje gösterilir. Bu projeyi featured yapmak istediğinize emin misiniz?`,
+              showCancelButton: true,
+              confirmButtonText: "Evet, Featured Yap",
+              cancelButtonText: "İptal"
+            });
+            
+            if (!result.isConfirmed) {
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Featured proje sayısı kontrol edilemedi:", err);
       }
-      if (thumbnailMedia) formData.append("thumbnail_media", thumbnailMedia);
-      if (bannerMedia) formData.append("banner_media", bannerMedia);
-      if (videoUrl.trim() !== "") formData.append("video_url", videoUrl);
+    }
 
-      let res;
+    try {
+      // Resimleri yükle
+      let bannerPath = "";
+
+      if (bannerMedia) {
+        const timestamp = Date.now();
+        const fileName = `project-banner-${timestamp}-${Math.random().toString(36).substring(2)}.${bannerMedia.name.split('.').pop()}`;
+        const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(bannerMedia, fileName);
+        if (uploadError) throw uploadError;
+        bannerPath = `/uploads/${fileName}`;
+      }
+
+      const projectData = {
+        title,
+        subtitle,
+        slug,
+        description,
+        external_link: externalLink,
+        client_name: clientName,
+        tab1,
+        tab2,
+        is_featured: isFeatured,
+        featured_order: parseInt(featuredOrder) || 0,
+        banner_media: bannerPath || null
+      };
+
       if (mode === "new") {
-        res = await axiosInstance.post("/api/projects", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const { data, error } = await api.projects.create(projectData);
+        if (error) throw error;
       } else {
-        res = await axiosInstance.put(`/api/projects/${slug}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        // Edit mode için slug'ı kullanarak projeyi bul ve güncelle
+        const { data: existingProjects, error: getError } = await api.projects.getAll();
+        if (getError) throw getError;
+        
+        if (!existingProjects) throw new Error("Projeler yüklenemedi");
+        
+        const existingProject = existingProjects.find(p => p.slug === slug);
+        if (!existingProject) throw new Error("Proje bulunamadı");
+        
+        const { error } = await api.projects.update(existingProject.id.toString(), projectData);
+        if (error) throw error;
       }
 
       Swal.fire({
@@ -127,19 +136,9 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
       });
 
       if (mode === "new") {
-        setTitle("");
-        setSubtitle("");
-        setSlug("");
-        setDescription("");
-        setExternalLink("");
-        setClientName("");
-        setYear("");
-        setRole("");
-        setIsFeatured(false);
-        setFeaturedOrder("");
-        setThumbnailMedia(null);
-        setBannerMedia(null);
-        setVideoUrl("");
+        // Yeni proje eklendiğinde projects sayfasına yönlendir
+        navigate("/admin/projects");
+        return;
       }
     } catch (err) {
       console.error("Proje kaydetme hatası:", err);
@@ -152,139 +151,126 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ maxWidth: 600, margin: "0 auto", padding: 20, display: "grid", gap: 16 }}>
-      <div>
-        <label style={labelStyle}>Başlık *</label>
-        <input
-          type="text"
+    <FormLayout title={mode === "new" ? "New Project" : "Edit Project"} backUrl="/admin/projects">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <FormInput
+          label="Başlık"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(value) => setTitle(value)}
           required
-          style={inputStyle}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Alt Başlık</label>
-        <input
-          type="text"
+        <FormInput
+          label="Alt Başlık"
           value={subtitle}
-          onChange={(e) => setSubtitle(e.target.value)}
-          style={inputStyle}
+          onChange={(value) => setSubtitle(value)}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Slug *</label>
-        <input
-          type="text"
+        <FormInput
+          label="Slug"
           value={slug}
-          onChange={(e) => setSlug(e.target.value)}
+          onChange={(value) => setSlug(value.toLowerCase())}
           required
-          style={inputStyle}
+          helperText="URL için kullanılacak benzersiz tanımlayıcı (otomatik küçük harfe çevrilir)"
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Açıklama</label>
-        <textarea
+        <FormTextarea
+          label="Açıklama"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(value) => setDescription(value)}
           rows={5}
-          style={{ ...inputStyle, resize: "vertical" }}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Dış Bağlantı (External Link)</label>
-        <input
+        <FormInput
+          label="Dış Bağlantı (External Link)"
           type="url"
           value={externalLink}
-          onChange={(e) => setExternalLink(e.target.value)}
+          onChange={(value) => setExternalLink(value)}
           placeholder="https://..."
-          style={inputStyle}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Müşteri (Client)</label>
-        <input
-          type="text"
+        <FormInput
+          label="Müşteri (Client)"
           value={clientName}
-          onChange={(e) => setClientName(e.target.value)}
-          style={inputStyle}
+          onChange={(value) => setClientName(value)}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Yıl</label>
-        <input
-          type="text"
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-          style={inputStyle}
+        <FormInput
+          label="Tab 1"
+          value={tab1}
+          onChange={(value) => setTab1(value)}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Rol</label>
-        <input
-          type="text"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          style={inputStyle}
+        <FormInput
+          label="Tab 2"
+          value={tab2}
+          onChange={(value) => setTab2(value)}
         />
-      </div>
 
-      <div>
-        <label style={labelStyle}>Thumbnail (image or video)</label>
-        <input type="file" accept="image/*,video/*" onChange={handleThumbnailChange} />
-        {thumbnailMedia && <p>Seçilen dosya: {thumbnailMedia.name}</p>}
-      </div>
-
-      <div>
-        <label style={labelStyle}>Banner (image or video)</label>
-        <input type="file" accept="image/*,video/*" onChange={handleBannerChange} />
-        {bannerMedia && <p>Seçilen dosya: {bannerMedia.name}</p>}
-      </div>
-
-      <div>
-        <label style={labelStyle}>Video URL (opsiyonel)</label>
-        <input
-          type="url"
-          value={videoUrl}
-          onChange={(e) => setVideoUrl(e.target.value)}
-          style={inputStyle}
-          placeholder="https://..."
+        <FormFileInput
+          label="Banner (Görsel veya Video)"
+          accept="image/*,video/*"
+          onChange={handleBannerChange}
+          helperText={bannerMedia ? `Seçilen dosya: ${bannerMedia.name}` : "Proje için banner görseli veya video yükleyin"}
         />
-      </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          type="checkbox"
+        <FormCheckbox
+          label="Featured (Anasayfada Göster)"
           checked={isFeatured}
-          onChange={(e) => setIsFeatured(e.target.checked)}
-          id="featured-checkbox"
+          onChange={async (checked) => {
+            if (checked) {
+              try {
+                const { data: existingProjects, error: getError } = await api.projects.getAll();
+                if (getError) throw getError;
+                
+                if (existingProjects) {
+                  const featuredCount = existingProjects.filter(p => p.is_featured).length;
+                  
+                  // Eğer bu proje zaten featured ise sayıyı azalt
+                  const currentProject = existingProjects.find(p => p.slug === slug);
+                  const adjustedCount = currentProject && currentProject.is_featured ? featuredCount - 1 : featuredCount;
+                  
+                  if (adjustedCount >= 4) {
+                    const result = await Swal.fire({
+                      icon: "warning",
+                      title: "Uyarı!",
+                      text: `Şu anda ${adjustedCount} featured proje var. Anasayfada sadece 4 featured proje gösterilir. Bu projeyi featured yapmak istediğinize emin misiniz?`,
+                      showCancelButton: true,
+                      confirmButtonText: "Evet, Featured Yap",
+                      cancelButtonText: "İptal"
+                    });
+                    
+                    if (!result.isConfirmed) {
+                      return; // Checkbox'ı işaretleme
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error("Featured proje sayısı kontrol edilemedi:", err);
+                return; // Hata durumunda checkbox'ı işaretleme
+              }
+            }
+            
+            setIsFeatured(checked);
+          }}
         />
-        <label htmlFor="featured-checkbox" style={{ margin: 0 }}>Featured mı?</label>
-      </div>
 
-      <div>
-        <label style={labelStyle}>Featured sırası</label>
-        <input
+        <FormInput
+          label="Featured Sırası"
           type="number"
           value={featuredOrder}
-          onChange={handleFeaturedOrderChange}
-          style={inputStyle}
+          onChange={(value) => setFeaturedOrder(value)}
           min={0}
-          step={1}
+          helperText="Anasayfada gösterim sırası (sayı ne kadar küçükse o kadar üstte görünür)"
         />
-      </div>
 
-      <button type="submit" style={buttonStyle}>
-        {mode === "new" ? "Proje Ekle" : "Projeyi Güncelle"}
-      </button>
-    </form>
+        <FormActions>
+          <FormButton type="submit" variant="primary">
+            {mode === "new" ? "Proje Ekle" : "Projeyi Güncelle"}
+          </FormButton>
+        </FormActions>
+      </form>
+    </FormLayout>
   );
 };
 

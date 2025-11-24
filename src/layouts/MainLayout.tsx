@@ -1,49 +1,108 @@
 // src/layouts/MainLayout.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useBreadcrumb } from "../contexts/BreadcrumbContext";
-import { LogOut, Home, Image, Folder, User, FileText, Award, Sliders, ChevronDown } from "lucide-react";
+import { LogOut, Home, Image, Folder, User, FileText, ChevronDown, Settings, ImageIcon, Layout, Shield, Briefcase, Award } from "lucide-react";
 import Swal from "sweetalert2";
 import Breadcrumb from "../components/common/Breadcrumb";
 import LoadingSpinner from "../components/common/LoadingSpinner";
+import { auth } from "../config/supabase";
+import { getHeaderSettings } from "../config/supabase";
 
 export default function MainLayout() {
   const { logout } = useAuth();
   const { breadcrumbs, isLoading } = useBreadcrumb();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aboutDropdownOpen, setAboutDropdownOpen] = useState(false);
+  const [homeDropdownOpen, setHomeDropdownOpen] = useState(false);
+  const [newsDropdownOpen, setNewsDropdownOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoText, setLogoText] = useState<string>("SB");
 
   // Hakkımızda sayfalarından birindeyse dropdown'ı açık tut
   const isAboutPage = breadcrumbs.some(breadcrumb =>
     breadcrumb.name === 'Hakkımızda' ||
-    breadcrumb.name === 'About Gallery' ||
-    breadcrumb.name === 'Awards' ||
-    breadcrumb.name === 'Slider' ||
-    breadcrumb.name === 'What We Do'
+    breadcrumb.name === 'Servisler' ||
+    breadcrumb.name === 'Tanınma' ||
+    breadcrumb.name === 'Müşteriler' ||
+    breadcrumb.name === 'Latest Projects Banner'
   );
 
-  // Eğer hakkımızda sayfasındaysa ve dropdown kapalıysa aç
+  // Anasayfa dropdown kontrolü
+  const isHomePage = breadcrumbs.some(breadcrumb =>
+    breadcrumb.name === 'Giriş Bannerları' ||
+    breadcrumb.name === 'About Banner'
+  );
+
+  // Haberler dropdown kontrolü
+  const isNewsPage = breadcrumbs.some(breadcrumb =>
+    breadcrumb.name === 'Haberler' ||
+    breadcrumb.name === 'Journal Banner'
+  );
+
+  // Header settings'den logo'yu çek
+  useEffect(() => {
+    const fetchLogo = async () => {
+      try {
+        const settings = await getHeaderSettings();
+        if (settings) {
+          // Koyu tema için light logo, açık tema için normal logo kullan
+          // Admin panel genelde koyu tema olduğu için light logo kullanıyoruz
+          const logo = settings.logo_image_url;
+          if (logo) {
+            setLogoUrl(logo);
+          }
+          if (settings.logo_text) {
+            setLogoText(settings.logo_text);
+          }
+        }
+      } catch (error) {
+        console.error('Logo yüklenirken hata:', error);
+      }
+    };
+    fetchLogo();
+  }, []);
+
+  // Eğer ilgili sayfalardaysa dropdown'ları açık tut
   React.useEffect(() => {
     if (isAboutPage && !aboutDropdownOpen) {
       setAboutDropdownOpen(true);
     }
-  }, [isAboutPage, aboutDropdownOpen]);
+    if (isHomePage && !homeDropdownOpen) {
+      setHomeDropdownOpen(true);
+    }
+    if (isNewsPage && !newsDropdownOpen) {
+      setNewsDropdownOpen(true);
+    }
+  }, [isAboutPage, isHomePage, isNewsPage, aboutDropdownOpen, homeDropdownOpen, newsDropdownOpen]);
 
   const menuItems = [
-    { name: "Ana Sayfa", path: "/admin/dashboard", icon: <Home size={18} /> },
-    { name: "Giriş Bannerları", path: "/admin/intro-banners", icon: <Image size={18} /> },
-                { name: "Projeler", path: "/admin/projects", icon: <Folder size={18} /> },
-            { name: "Haberler", path: "/admin/news", icon: <FileText size={18} /> },
-            { name: "Contact", path: "/admin/contact", icon: <FileText size={18} /> },
+    { name: "Dashboard", path: "/admin/dashboard", icon: <Home size={18} /> },
+    { name: "Header", path: "/admin/header", icon: <Settings size={18} /> },
+    { name: "Footer", path: "/admin/footer", icon: <Layout size={18} /> },
+    { name: "Projeler", path: "/admin/projects", icon: <Folder size={18} /> },
+    { name: "İletişim", path: "/admin/contact", icon: <FileText size={18} /> },
+    { name: "İletişim Formu", path: "/admin/contact-submissions", icon: <FileText size={18} /> },
+    { name: "IP Yönetimi", path: "/admin/ip-management", icon: <Shield size={18} /> },
+  ];
+
+  const homeSubmenuItems = [
+    { name: "Giriş Bannerları", path: "/admin/intro-banners", icon: <Image size={16} /> },
+    { name: "About Banner", path: "/admin/about-banner", icon: <ImageIcon size={16} /> },
+  ];
+
+  const newsSubmenuItems = [
+    { name: "Haberler", path: "/admin/news", icon: <FileText size={16} /> },
+    { name: "Journal Banner", path: "/admin/journal-banner", icon: <ImageIcon size={16} /> },
   ];
 
   const aboutSubmenuItems = [
     { name: "Genel Bilgiler", path: "/admin/about", icon: <User size={16} /> },
-    { name: "About Gallery", path: "/admin/about-gallery", icon: <Image size={16} /> },
-    { name: "Awards", path: "/admin/awards", icon: <Award size={16} /> },
-    { name: "Slider", path: "/admin/slider", icon: <Sliders size={16} /> },
-    { name: "What We Do", path: "/admin/what-we-do", icon: <FileText size={16} /> },
+    { name: "Servisler", path: "/admin/services", icon: <Briefcase size={16} /> },
+    { name: "Tanınma", path: "/admin/recognition", icon: <Award size={16} /> },
+    { name: "Müşteriler", path: "/admin/clients", icon: <Briefcase size={16} /> },
+    { name: "Latest Projects Banner", path: "/admin/latest-projects-banner", icon: <ImageIcon size={16} /> },
   ];
 
   const handleLogout = () => {
@@ -68,17 +127,29 @@ export default function MainLayout() {
       <aside
         className={`fixed top-0 left-0 h-[100vh] w-64 bg-base-100 shadow-lg z-40 transform transition-transform duration-300
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          md:translate-x-0 md:static md:shadow-none
+          md:translate-x-0 md:sticky md:shadow-none
           flex flex-col
         `}
       >
         <div className="p-4 border-b border-base-300 flex justify-between items-center md:hidden">
-          <h2 className="text-lg font-bold">Admin Panel</h2>
+          <div className="flex items-center gap-2">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-8 w-auto object-contain" />
+            ) : (
+              <span className="text-lg font-bold uppercase tracking-wider">{logoText}</span>
+            )}
+          </div>
           <button onClick={() => setSidebarOpen(false)}>✕</button>
         </div>
 
         <div className="p-6 hidden md:block">
-          <h2 className="text-2xl font-bold">Admin Panel</h2>
+          <div className="flex items-center gap-2">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-10 w-auto object-contain" />
+            ) : (
+              <span className="text-2xl font-bold uppercase tracking-wider">{logoText}</span>
+            )}
+          </div>
         </div>
 
         {/* Menü alanı - flex-grow ile büyüsün */}
@@ -98,6 +169,98 @@ export default function MainLayout() {
                 </NavLink>
               </li>
             ))}
+
+            {/* Anasayfa Dropdown */}
+            <li className="mb-2">
+              <button
+                onClick={() => setHomeDropdownOpen(!homeDropdownOpen)}
+                className={`flex items-center justify-between w-full rounded-lg transition-colors ${
+                  homeDropdownOpen ? "bg-primary text-primary-content" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Home size={18} />
+                  Anasayfa
+                </div>
+                <ChevronDown 
+                  size={16} 
+                  className={`transition-transform duration-200 ${
+                    homeDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              
+              {homeDropdownOpen && (
+                <ul className="mt-2 ml-4 space-y-1">
+                  {homeSubmenuItems.map(({ name, path, icon }) => (
+                    <li key={path}>
+                      <NavLink
+                        to={path}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                            isActive 
+                              ? "bg-primary text-primary-content" 
+                              : "hover:bg-base-300"
+                          }`
+                        }
+                        onClick={() => {
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        {icon}
+                        {name}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+
+            {/* Haberler Dropdown */}
+            <li className="mb-2">
+              <button
+                onClick={() => setNewsDropdownOpen(!newsDropdownOpen)}
+                className={`flex items-center justify-between w-full rounded-lg transition-colors ${
+                  newsDropdownOpen ? "bg-primary text-primary-content" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileText size={18} />
+                  Haberler
+                </div>
+                <ChevronDown 
+                  size={16} 
+                  className={`transition-transform duration-200 ${
+                    newsDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              
+              {newsDropdownOpen && (
+                <ul className="mt-2 ml-4 space-y-1">
+                  {newsSubmenuItems.map(({ name, path, icon }) => (
+                    <li key={path}>
+                      <NavLink
+                        to={path}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                            isActive 
+                              ? "bg-primary text-primary-content" 
+                              : "hover:bg-base-300"
+                          }`
+                        }
+                        onClick={() => {
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        {icon}
+                        {name}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
 
             {/* Hakkımızda Dropdown */}
             <li className="mb-2">

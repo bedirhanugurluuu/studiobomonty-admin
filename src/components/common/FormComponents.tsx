@@ -9,6 +9,8 @@ interface FormInputProps {
   required?: boolean;
   type?: 'text' | 'number' | 'email' | 'url';
   className?: string;
+  helperText?: string;
+  min?: number;
 }
 
 export function FormInput({
@@ -18,7 +20,9 @@ export function FormInput({
   placeholder,
   required = false,
   type = 'text',
-  className = ''
+  className = '',
+  helperText,
+  min
 }: FormInputProps) {
   return (
     <div className={className}>
@@ -32,7 +36,11 @@ export function FormInput({
         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         placeholder={placeholder}
         required={required}
+        min={min}
       />
+      {helperText && (
+        <p className="text-sm text-gray-500 mt-2">{helperText}</p>
+      )}
     </div>
   );
 }
@@ -64,7 +72,7 @@ export function FormFileInput({
         type="file"
         onChange={(e) => onChange(e.target.files?.[0] || null)}
         accept={accept}
-        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
         required={required}
       />
       {helperText && (
@@ -216,6 +224,42 @@ export function FormActions({ children, className = '' }: FormActionsProps) {
   return (
     <div className={`flex space-x-4 pt-6 ${className}`}>
       {children}
+    </div>
+  );
+}
+
+// Form Checkbox Component
+interface FormCheckboxProps {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  className?: string;
+  helperText?: string;
+}
+
+export function FormCheckbox({
+  label,
+  checked,
+  onChange,
+  className = '',
+  helperText
+}: FormCheckboxProps) {
+  return (
+    <div className={className}>
+      <div className="flex items-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        />
+        <label className="ml-2 block text-sm font-medium text-gray-700">
+          {label}
+        </label>
+      </div>
+      {helperText && (
+        <p className="text-sm text-gray-500 mt-1 ml-6">{helperText}</p>
+      )}
     </div>
   );
 }

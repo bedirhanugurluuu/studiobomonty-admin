@@ -1,0 +1,24 @@
+# Ana proje dosyalarını admin panel build'inden hariç tut
+../pages/
+../components/
+../lib/
+../hooks/
+../styles/
+../public/
+../backend/
+../scripts/
+../utils/
+../app/
+../middleware.ts
+../next.config.*
+../tsconfig.json
+../package.json
+../package-lock.json
+../README.md
+../vercel.json
+../.gitignore
+../.env*
+../env.*
+../*.md
+!README.md
+

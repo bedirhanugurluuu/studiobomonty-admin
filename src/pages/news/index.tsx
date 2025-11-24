@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../utils/api';
+import { storageUtils } from '../../utils/supabaseStorage';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 interface News {
   id: number;
   title: string;
   category_text: string;
-  photographer: string;
-  subtitle: string;
   slug: string;
   content?: string;
   image_path?: string;
-  aspect_ratio?: string;
-  is_featured?: boolean;
-  featured_order?: number;
   published_at: string;
   created_at: string;
   updated_at: string;
@@ -32,8 +28,9 @@ export default function NewsList() {
   const fetchNews = async () => {
     try {
       setLoading(true);
-      const response = await api.getNews();
-      setNews(response.data as News[]);
+      const { data, error } = await api.news.getAll();
+      if (error) throw error;
+      setNews(data as News[]);
     } catch (err) {
       setError('News yüklenirken hata oluştu');
       console.error('Error fetching news:', err);
@@ -48,32 +45,22 @@ export default function NewsList() {
     }
 
     try {
-      await api.deleteNews(id);
+      // Önce haberi bul
+      const newsItem = news.find(item => item.id === id);
+      
+      // Resmi sil (eğer varsa)
+      if (newsItem?.image_path) {
+        console.log('News resmi siliniyor:', newsItem.image_path);
+        await storageUtils.deleteFile(newsItem.image_path);
+      }
+
+      // Veritabanından sil
+      const { error } = await api.news.delete(id.toString());
+      if (error) throw error;
       setNews(news.filter(item => item.id !== id));
     } catch (err) {
       alert('Haber silinirken hata oluştu');
       console.error('Error deleting news:', err);
-    }
-  };
-
-  const toggleFeatured = async (id: number, currentFeatured: boolean) => {
-    try {
-      const newsItem = news.find(item => item.id === id);
-      if (!newsItem) return;
-
-      await api.updateNews(id, {
-        ...newsItem,
-        is_featured: !currentFeatured
-      });
-
-      setNews(news.map(item => 
-        item.id === id 
-          ? { ...item, is_featured: !currentFeatured }
-          : item
-      ));
-    } catch (err) {
-      alert('Featured durumu güncellenirken hata oluştu');
-      console.error('Error updating featured status:', err);
     }
   };
 
@@ -94,7 +81,7 @@ export default function NewsList() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">News Yönetimi</h1>
         <Link
-          to="/news/new"
+          to="/admin/news/new"
           className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
         >
           Yeni Makale Ekle
@@ -105,7 +92,7 @@ export default function NewsList() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                  Görsel
                </th>
                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -113,9 +100,6 @@ export default function NewsList() {
                </th>
                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                  Kategori
-               </th>
-               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                 Öne Çıkan
                </th>
                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                  Yayın Tarihi
@@ -136,8 +120,8 @@ export default function NewsList() {
                     {item.image_path ? (
                       <img
                         className="h-12 w-12 rounded-lg object-cover"
-                        src={`http://localhost:5000/uploads/${item.image_path}`}
-                        alt={item.subtitle}
+                        src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${item.image_path}`}
+                        alt={item.title}
                       />
                     ) : (
                       <div className="h-12 w-12 bg-gray-200 rounded-lg flex items-center justify-center">
@@ -148,7 +132,7 @@ export default function NewsList() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="text-sm font-medium text-gray-900">
-                    {item.subtitle}
+                    {item.title}
                   </div>
                   <div className="text-sm text-gray-500">
                     {item.slug}
@@ -159,18 +143,6 @@ export default function NewsList() {
                     {item.category_text}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => toggleFeatured(item.id, item.is_featured || false)}
-                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      item.is_featured
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                                         {item.is_featured ? 'Öne Çıkan' : 'Öne Çıkmayan'}
-                  </button>
-                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(item.published_at).toLocaleDateString()}
                 </td>
@@ -180,7 +152,7 @@ export default function NewsList() {
                       to={`/admin/news/edit/${item.id}`}
                       className="text-indigo-600 hover:text-indigo-900"
                     >
-                                             Düzenle
+                      Düzenle
                      </Link>
                      <button
                        onClick={() => deleteNews(item.id)}
@@ -197,7 +169,7 @@ export default function NewsList() {
 
         {news.length === 0 && (
           <div className="text-center py-12">
-                         <p className="text-gray-500">Henüz haber makalesi bulunamadı.</p>
+            <p className="text-gray-500">Henüz haber makalesi bulunamadı.</p>
              <Link
                to="/admin/news/new"
                className="mt-4 inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"

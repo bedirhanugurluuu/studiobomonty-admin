@@ -2,12 +2,12 @@
 export const API_CONFIG = {
   // Development
   development: {
-    baseURL: 'http://localhost:5000',
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
     apiPath: '/api'
   },
   // Production
   production: {
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'https://ofy-portfolio-h97t.vercel.app',
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'https://studiobomontyy.vercel.app',
     apiPath: '/api'
   }
 };
@@ -16,15 +16,55 @@ export const API_CONFIG = {
 const getApiConfig = () => {
   // Debug için console.log
   console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('NODE_ENV:', import.meta.env.MODE);
+  console.log('DEV:', import.meta.env.DEV);
   
-  // Vercel deployment'da production, local'de development
-  const env = import.meta.env.VITE_API_BASE_URL?.includes('localhost') ? 'development' : 'production';
+  // Development modunda kontrol et
+  const isDevelopment = import.meta.env.MODE === 'development' || 
+                        import.meta.env.DEV;
+  
+  // Eğer VITE_API_BASE_URL set edilmişse
+  if (import.meta.env.VITE_API_BASE_URL) {
+    const viteUrl = import.meta.env.VITE_API_BASE_URL;
+    
+    // Development modunda ve URL localhost:3002 ise (Vite dev server), ignore et
+    if (isDevelopment && (viteUrl.includes(':3002') || viteUrl.includes('localhost:3002'))) {
+      console.warn('VITE_API_BASE_URL points to Vite dev server (3002), using Next.js default (3000)');
+      return {
+        baseURL: 'http://localhost:3000',
+        apiPath: '/api'
+      };
+    }
+    
+    // Production veya doğru URL ise kullan
+    console.log('Using VITE_API_BASE_URL:', viteUrl);
+    return {
+      baseURL: viteUrl,
+      apiPath: '/api'
+    };
+  }
+  
+  // Development modunda localhost:3000 kullan, aksi halde production URL'i kullan
+  const env = isDevelopment ? 'development' : 'production';
   console.log('Selected env:', env);
-  return API_CONFIG[env as keyof typeof API_CONFIG] || API_CONFIG.development;
+  const config = API_CONFIG[env as keyof typeof API_CONFIG] || API_CONFIG.development;
+  console.log('Using API config:', config);
+  return config;
 };
 
-// Merkezi API base URL
-export const API_BASE_URL = `${getApiConfig().baseURL}${getApiConfig().apiPath}`;
+// Merkezi API base URL - Always ensure absolute URL
+const apiConfig = getApiConfig();
+let apiBaseUrl = `${apiConfig.baseURL}${apiConfig.apiPath}`;
+
+// Ensure it's an absolute URL (starts with http:// or https://)
+if (!apiBaseUrl.startsWith('http://') && !apiBaseUrl.startsWith('https://')) {
+  // Fallback to localhost:3000 if somehow relative
+  apiBaseUrl = `http://localhost:3000${apiConfig.apiPath}`;
+  console.warn('API_BASE_URL was relative, using fallback:', apiBaseUrl);
+}
+
+export const API_BASE_URL = apiBaseUrl;
+console.log('Final API_BASE_URL:', API_BASE_URL);
 
 // API endpoint'leri
 export const API_ENDPOINTS = {
@@ -54,7 +94,8 @@ export const API_ENDPOINTS = {
   whatWeDo: '/what-we-do',
   
   // Contact
-  contact: '/contact'
+  contact: '/contact',
+  contactSubmissions: '/contact-submissions'
 } as const;
 
 // Tam API URL'lerini oluştur

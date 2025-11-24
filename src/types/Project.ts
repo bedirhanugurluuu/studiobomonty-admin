@@ -1,16 +1,19 @@
 export interface Project {
-  id: number;
+  id: string;
   title: string;
   subtitle: string;
   slug: string;
-  thumbnail_media: string; // backend'de thumbnail_media olarak saklanıyor
   banner_media?: string; // backend'de banner_media olarak saklanıyor
+  featured: boolean; // is_featured değil, featured
   is_featured: boolean;
-  featured_order: number | null;
+  featured_order: number;
   description: string;
   client_name?: string;
-  year?: string; // backend'de string olarak geliyor
-  role?: string;
+  tab1?: string;
+  tab2?: string;
   external_link?: string;
   gallery_images?: string[]; // galeri görselleri
+  display_order?: number; // Proje sıralaması için
+  created_at?: string;
+  updated_at?: string;
 }

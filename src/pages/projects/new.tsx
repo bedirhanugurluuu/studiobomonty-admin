@@ -13,10 +13,5 @@ export default function ProjectsNewPage() {
     ]);
   }, [setBreadcrumbs]);
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Yeni Proje Ekle</h1>
-      <ProjectForm mode="new" />
-    </div>
-  );
+  return <ProjectForm mode="new" />;
 }
