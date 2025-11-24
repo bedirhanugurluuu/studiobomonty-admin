@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "installCommand": "rm -f package-lock.json && npm install",
+  "installCommand": "rm -rf node_modules package-lock.json .npm && npm cache clean --force && npm install",
   "outputDirectory": "dist",
   "rewrites": [
     {
