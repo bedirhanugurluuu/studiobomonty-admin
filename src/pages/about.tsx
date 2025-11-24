@@ -155,7 +155,7 @@ export default function AboutPage() {
             <textarea
               value={content.main_text || ""}
               onChange={(e) => setContent({ ...content, main_text: e.target.value })}
-              className="textarea textarea-bordered w-full h-32"
+              className="textarea textarea-bordered w-full h-32 p-2"
               placeholder="Ana metin içeriği..."
               required
             />
