@@ -10,16 +10,21 @@ interface BannerFormState {
   id?: string;
   title_line1: string;
   image?: string;
+  mobile_image_url?: string;
 }
 
 export default function IntroBannerSettingsPage() {
   const [form, setForm] = useState<BannerFormState>({
     title_line1: "",
     image: undefined,
+    mobile_image_url: undefined,
   });
   const [file, setFile] = useState<File | null>(null);
+  const [mobileFile, setMobileFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [mobilePreviewUrl, setMobilePreviewUrl] = useState<string | null>(null);
   const [originalImage, setOriginalImage] = useState<string | undefined>(undefined);
+  const [originalMobileImage, setOriginalMobileImage] = useState<string | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const { setBreadcrumbs, setIsLoading } = useBreadcrumb();
 
@@ -41,8 +46,10 @@ export default function IntroBannerSettingsPage() {
             id: data.id,
             title_line1: data.title_line1 ?? "",
             image: data.image ?? undefined,
+            mobile_image_url: data.mobile_image_url ?? undefined,
           });
           setOriginalImage(data.image ?? undefined);
+          setOriginalMobileImage(data.mobile_image_url ?? undefined);
         }
       })
       .catch((err) => {
@@ -61,8 +68,11 @@ export default function IntroBannerSettingsPage() {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
+      if (mobilePreviewUrl) {
+        URL.revokeObjectURL(mobilePreviewUrl);
+      }
     };
-  }, [previewUrl]);
+  }, [previewUrl, mobilePreviewUrl]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -77,6 +87,17 @@ export default function IntroBannerSettingsPage() {
         URL.revokeObjectURL(previewUrl);
       }
       setPreviewUrl(URL.createObjectURL(selected));
+    }
+  };
+
+  const handleMobileFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files && e.target.files[0];
+    if (selected) {
+      setMobileFile(selected);
+      if (mobilePreviewUrl) {
+        URL.revokeObjectURL(mobilePreviewUrl);
+      }
+      setMobilePreviewUrl(URL.createObjectURL(selected));
     }
   };
 
@@ -121,6 +142,47 @@ export default function IntroBannerSettingsPage() {
     }
   };
 
+  const removeCurrentMobileMedia = async () => {
+    if (!form.mobile_image_url) return;
+    const result = await Swal.fire({
+      title: "Mevcut mobile medyayı kaldır?",
+      text: "Bu işlem mobile medyayı kalıcı olarak silecektir.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Evet, kaldır",
+      cancelButtonText: "İptal",
+    });
+
+    if (!result.isConfirmed) return;
+
+    setIsSaving(true);
+    try {
+      await storageUtils.deleteFile(form.mobile_image_url);
+      setForm((prev) => ({ ...prev, mobile_image_url: undefined }));
+      setOriginalMobileImage(undefined);
+      if (mobilePreviewUrl) {
+        URL.revokeObjectURL(mobilePreviewUrl);
+        setMobilePreviewUrl(null);
+      }
+      setMobileFile(null);
+      Swal.fire({
+        icon: "success",
+        title: "Silindi",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error("Mobile medya silme hatası:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Hata",
+        text: "Mobile medya silinemedi.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -137,7 +199,9 @@ export default function IntroBannerSettingsPage() {
 
     try {
       let mediaPath = form.image;
+      let mobileMediaPath = form.mobile_image_url;
 
+      // Desktop image upload
       if (file) {
         if (originalImage) {
           await storageUtils.deleteFile(originalImage);
@@ -152,10 +216,26 @@ export default function IntroBannerSettingsPage() {
         setOriginalImage(mediaPath);
       }
 
+      // Mobile image upload
+      if (mobileFile) {
+        if (originalMobileImage) {
+          await storageUtils.deleteFile(originalMobileImage);
+        }
+
+        const timestamp = Date.now();
+        const extension = mobileFile.name.split(".").pop();
+        const filename = `intro-banner-mobile-${timestamp}-${Math.random().toString(36).slice(2)}.${extension}`;
+        const { error: uploadError } = await storageUtils.uploadFile(mobileFile, filename);
+        if (uploadError) throw uploadError;
+        mobileMediaPath = `/uploads/${filename}`;
+        setOriginalMobileImage(mobileMediaPath);
+      }
+
       const payload = {
         id: form.id,
         title_line1: form.title_line1,
         image: mediaPath ?? null,
+        mobile_image_url: mobileMediaPath ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -166,11 +246,17 @@ export default function IntroBannerSettingsPage() {
         ...prev,
         id: data.id,
         image: data.image ?? mediaPath ?? undefined,
+        mobile_image_url: data.mobile_image_url ?? mobileMediaPath ?? undefined,
       }));
       setFile(null);
+      setMobileFile(null);
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
         setPreviewUrl(null);
+      }
+      if (mobilePreviewUrl) {
+        URL.revokeObjectURL(mobilePreviewUrl);
+        setMobilePreviewUrl(null);
       }
 
       Swal.fire({
@@ -215,6 +301,29 @@ export default function IntroBannerSettingsPage() {
     );
   }, [previewUrl, form.image]);
 
+  const mobileMediaPreview = useMemo(() => {
+    const url = mobilePreviewUrl || (form.mobile_image_url ? getImageUrl(form.mobile_image_url) : null);
+    if (!url) return null;
+    const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(url);
+
+    return isVideo ? (
+      <video
+        src={url}
+        controls
+        className="w-full max-h-80 rounded-lg object-cover"
+      />
+    ) : (
+      <img
+        src={url}
+        alt="Intro banner mobile media"
+        className="w-full max-h-80 rounded-lg object-cover"
+        onError={(e) => {
+          e.currentTarget.src = getFallbackImageUrl();
+        }}
+      />
+    );
+  }, [mobilePreviewUrl, form.mobile_image_url]);
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -239,7 +348,7 @@ export default function IntroBannerSettingsPage() {
         </div>
 
         <div className="space-y-3">
-          <label className="font-semibold">Görsel / Video</label>
+          <label className="font-semibold">Desktop Görsel / Video</label>
           <input
             type="file"
             accept="image/*,video/*"
@@ -254,11 +363,35 @@ export default function IntroBannerSettingsPage() {
               className="btn btn-outline btn-error btn-sm"
               disabled={isSaving}
             >
-              Mevcut Medyayı Kaldır
+              Mevcut Desktop Medyayı Kaldır
             </button>
           )}
           <p className="text-xs text-base-content/60">
             Video yükleyecekseniz MP4 veya WebM formatlarını tercih edin. Dosya boyutunu optimize etmeyi unutmayın.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <label className="font-semibold">Mobile Görsel / Video</label>
+          <input
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleMobileFileChange}
+            className="file-input file-input-bordered w-full"
+          />
+          {mobileMediaPreview}
+          {(form.mobile_image_url || mobilePreviewUrl) && (
+            <button
+              type="button"
+              onClick={removeCurrentMobileMedia}
+              className="btn btn-outline btn-error btn-sm"
+              disabled={isSaving}
+            >
+              Mevcut Mobile Medyayı Kaldır
+            </button>
+          )}
+          <p className="text-xs text-base-content/60">
+            Mobile cihazlar için ayrı görsel/video yükleyebilirsiniz. Video yükleyecekseniz MP4 veya WebM formatlarını tercih edin.
           </p>
         </div>
 

@@ -477,8 +477,17 @@ export const api = {
         .from('project_gallery')
         .select('*')
         .eq('project_id', projectId)
-        .order('sort', { ascending: true })
-      return { data, error }
+      
+      if (error) return { data: null, error }
+      
+      // Numeric sıralama yap (string sıralama problemi için)
+      const sorted = (data || []).sort((a: any, b: any) => {
+        const sortA = typeof a.sort === 'number' ? a.sort : parseInt(a.sort) || 0;
+        const sortB = typeof b.sort === 'number' ? b.sort : parseInt(b.sort) || 0;
+        return sortA - sortB;
+      })
+      
+      return { data: sorted, error: null }
     },
 
     getById: async (id: string) => {
@@ -853,6 +862,53 @@ export const api = {
     delete: async (id: string) => {
       const { error } = await supabase
         .from('project_team_members')
+        .delete()
+        .eq('id', id)
+      return { error }
+    }
+  },
+
+  // Project Tabs
+  projectTabs: {
+    getAll: async () => {
+      const { data, error } = await supabase
+        .from('project_tabs')
+        .select('*')
+        .order('order_index', { ascending: true })
+      return { data, error }
+    },
+
+    getById: async (id: string) => {
+      const { data, error } = await supabase
+        .from('project_tabs')
+        .select('*')
+        .eq('id', id)
+        .single()
+      return { data, error }
+    },
+
+    create: async (tab: any) => {
+      const { data, error } = await supabase
+        .from('project_tabs')
+        .insert(tab)
+        .select()
+        .single()
+      return { data, error }
+    },
+
+    update: async (id: string, updates: any) => {
+      const { data, error } = await supabase
+        .from('project_tabs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single()
+      return { data, error }
+    },
+
+    delete: async (id: string) => {
+      const { error } = await supabase
+        .from('project_tabs')
         .delete()
         .eq('id', id)
       return { error }

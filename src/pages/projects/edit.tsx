@@ -17,12 +17,15 @@ const ProjectsEditPage = () => {
   const [gallery, setGallery] = useState<any[]>([]);
   const [newImages, setNewImages] = useState<File[]>([]);
   const [newBanner, setNewBanner] = useState<File | null>(null);
+  const [newMobileBanner, setNewMobileBanner] = useState<File | null>(null);
   const [galleryOrderValues, setGalleryOrderValues] = useState<Record<string, number>>({});
   const [description, setDescription] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [clientName, setClientName] = useState("");
   const [tab1, setTab1] = useState("");
   const [tab2, setTab2] = useState("");
+  const [projectTabId, setProjectTabId] = useState<string>("");
+  const [availableTabs, setAvailableTabs] = useState<any[]>([]);
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -55,6 +58,13 @@ const ProjectsEditPage = () => {
         setClientName(res.data.client_name || "");
         setTab1(res.data.tab1 || "");
         setTab2(res.data.tab2 || "");
+        setProjectTabId(res.data.project_tab_id || "");
+        
+        // Fetch available tabs
+        const { data: tabsData, error: tabsError } = await api.projectTabs.getAll();
+        if (!tabsError && tabsData) {
+          setAvailableTabs(tabsData);
+        }
         
         // Team members'ı çek
         if (id) {
@@ -101,6 +111,7 @@ const ProjectsEditPage = () => {
     try {
       // Yeni resimleri yükle
       let newBannerPath = project?.banner_media;
+      let newMobileBannerPath = project?.mobile_image_url;
 
       if (newBanner) {
         // Eski banner'ı sil
@@ -118,6 +129,22 @@ const ProjectsEditPage = () => {
         newBannerPath = `/uploads/${fileName}`;
       }
 
+      if (newMobileBanner) {
+        // Eski mobile banner'ı sil
+        if (project?.mobile_image_url) {
+          const urlParts = project.mobile_image_url.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          await storageUtils.deleteFile(fileName);
+        }
+        
+        // Yeni mobile banner'ı yükle
+        const timestamp = Date.now();
+        const fileName = `project-banner-mobile-${timestamp}-${Math.random().toString(36).substring(2)}.${newMobileBanner.name.split('.').pop()}`;
+        const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(newMobileBanner, fileName);
+        if (uploadError) throw uploadError;
+        newMobileBannerPath = `/uploads/${fileName}`;
+      }
+
       const updateData: any = {};
       
       // Sadece değişen field'ları ekle
@@ -129,9 +156,11 @@ const ProjectsEditPage = () => {
       if (clientName !== project?.client_name) updateData.client_name = clientName;
       if (tab1 !== project?.tab1) updateData.tab1 = tab1;
       if (tab2 !== project?.tab2) updateData.tab2 = tab2;
+      if (projectTabId !== project?.project_tab_id) updateData.project_tab_id = projectTabId || null;
       
       // Resim path'lerini ekle
       if (newBanner) updateData.banner_media = newBannerPath;
+      if (newMobileBanner) updateData.mobile_image_url = newMobileBannerPath;
       
       // Bu field'ları her zaman gönder (gerekli olabilir)
       if (!updateData.slug) updateData.slug = project?.slug || "";
@@ -173,6 +202,10 @@ const ProjectsEditPage = () => {
 
   const handleBannerChange = (file: File | null) => {
     setNewBanner(file);
+  };
+
+  const handleMobileBannerChange = (file: File | null) => {
+    setNewMobileBanner(file);
   };
 
   const handleGalleryUpload = async () => {
@@ -501,10 +534,38 @@ const ProjectsEditPage = () => {
         )}
 
         <FormFileInput
-          label="Banner (Görsel veya Video)"
+          label="Desktop Banner (Görsel veya Video)"
           accept="image/*,video/*"
           onChange={handleBannerChange}
-          helperText={newBanner ? `Yeni seçilen: ${newBanner.name}` : "Proje için banner görseli veya video yükleyin"}
+          helperText={newBanner ? `Yeni seçilen: ${newBanner.name}` : "Proje için desktop banner görseli veya video yükleyin"}
+        />
+
+        {/* Mobile Banner Preview */}
+        {project.mobile_image_url && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Mevcut Mobile Banner:</label>
+            {/\.(mp4|webm|ogg|mov)$/i.test(project.mobile_image_url) ? (
+              <div className="w-full max-w-md h-48 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600">
+                🎥 Video Mobile Banner
+              </div>
+            ) : (
+              <img
+                src={getImageUrl(project.mobile_image_url)}
+                alt="Mobile Banner"
+                className="w-full max-w-md h-48 object-cover rounded-lg border border-gray-300"
+                onError={(e) => {
+                  e.currentTarget.src = getFallbackImageUrl();
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        <FormFileInput
+          label="Mobile Banner (Görsel veya Video)"
+          accept="image/*,video/*"
+          onChange={handleMobileBannerChange}
+          helperText={newMobileBanner ? `Yeni seçilen: ${newMobileBanner.name}` : "Proje için mobile banner görseli veya video yükleyin (opsiyonel)"}
         />
 
         <FormInput
@@ -560,6 +621,17 @@ const ProjectsEditPage = () => {
           label="Tab 2"
           value={tab2}
           onChange={(value) => setTab2(value)}
+        />
+
+        <FormSelect
+          label="Project Tab (Kategori)"
+          value={projectTabId}
+          onChange={(value) => setProjectTabId(value)}
+          options={[
+            { value: "", label: "Kategori Seçiniz" },
+            ...availableTabs.map(tab => ({ value: tab.id, label: tab.name }))
+          ]}
+          helperText="Projenin hangi kategoriye ait olduğunu seçin (filtreleme için)"
         />
 
         <FormSelect

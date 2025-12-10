@@ -82,6 +82,7 @@ export default function MainLayout() {
     { name: "Header", path: "/admin/header", icon: <Settings size={18} /> },
     { name: "Footer", path: "/admin/footer", icon: <Layout size={18} /> },
     { name: "Projeler", path: "/admin/projects", icon: <Folder size={18} /> },
+    { name: "Project Tabs", path: "/admin/project-tabs", icon: <Folder size={18} /> },
     { name: "İletişim", path: "/admin/contact", icon: <FileText size={18} /> },
     { name: "İletişim Formu", path: "/admin/contact-submissions", icon: <FileText size={18} /> },
     { name: "IP Yönetimi", path: "/admin/ip-management", icon: <Shield size={18} /> },

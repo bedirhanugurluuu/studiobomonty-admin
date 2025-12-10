@@ -31,6 +31,7 @@ export default function NewsForm() {
   const [fetching, setFetching] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [originalContent, setOriginalContent] = useState<string>(''); // Eski içeriği saklamak için
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -213,6 +214,9 @@ export default function NewsForm() {
         image_path: news.image_path || '',
       });
       
+      // Eski içeriği sakla (kullanılmayan resimleri silmek için)
+      setOriginalContent(news.content || '');
+      
       if (news.image_path) {
         setCurrentImage(`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${news.image_path}`);
       }
@@ -299,6 +303,48 @@ export default function NewsForm() {
         console.log('=== NEWS RESİM İŞLEMİ BİTTİ ===');
       }
 
+      // Kullanılmayan resimleri temizle (sadece edit modunda)
+      if (isEditing && originalContent) {
+        console.log('=== CLEANUP UNUSED IMAGES ===');
+        console.log('Original content:', originalContent.substring(0, 200) + '...');
+        console.log('New content:', formData.content.substring(0, 200) + '...');
+        
+        try {
+          const { deleted, errors } = await storageUtils.deleteUnusedImages(
+            originalContent,
+            formData.content
+          );
+          
+          if (deleted > 0) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Temizlik Tamamlandı',
+              text: `${deleted} kullanılmayan resim storage'dan silindi.`,
+              timer: 2000,
+              showConfirmButton: false,
+            });
+            console.log(`✓ ${deleted} kullanılmayan resim silindi`);
+          } else {
+            console.log('Kullanılmayan resim bulunamadı');
+          }
+          
+          if (errors.length > 0) {
+            console.warn(`⚠ ${errors.length} resim silinirken hata oluştu:`, errors);
+            Swal.fire({
+              icon: 'warning',
+              title: 'Uyarı',
+              text: `${errors.length} resim silinirken hata oluştu. Console'u kontrol edin.`,
+              timer: 3000,
+            });
+          }
+        } catch (err) {
+          // Resim silme hatası form submit'ini engellemez
+          console.error('❌ Kullanılmayan resimleri temizlerken hata:', err);
+        }
+      } else {
+        console.log('Cleanup skipped - isEditing:', isEditing, 'originalContent:', !!originalContent);
+      }
+
       // Form data'yı güncelle
       const updateData = {
         ...formData,
@@ -308,6 +354,8 @@ export default function NewsForm() {
       if (isEditing) {
         const { error } = await api.news.update(id!, updateData);
         if (error) throw error;
+        // Güncelleme başarılı olduğunda originalContent'i güncelle
+        setOriginalContent(formData.content);
       } else {
         const { error } = await api.news.create(updateData);
         if (error) throw error;

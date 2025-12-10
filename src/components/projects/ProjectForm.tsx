@@ -4,7 +4,7 @@ import { api } from "../../utils/api";
 import { storageUtils } from "../../utils/supabaseStorage";
 import Swal from "sweetalert2";
 import { FormLayout } from "../common/PageLayout";
-import { FormInput, FormTextarea, FormFileInput, FormCheckbox, FormButton, FormActions } from "../common/FormComponents";
+import { FormInput, FormTextarea, FormFileInput, FormCheckbox, FormButton, FormActions, FormSelect } from "../common/FormComponents";
 
 interface ProjectResponse {
   id: number;
@@ -30,13 +30,35 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
   const [clientName, setClientName] = useState("");
   const [tab1, setTab1] = useState("");
   const [tab2, setTab2] = useState("");
+  const [projectTabId, setProjectTabId] = useState<string>("");
+  const [availableTabs, setAvailableTabs] = useState<any[]>([]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [featuredOrder, setFeaturedOrder] = useState<string>("");
   const [bannerMedia, setBannerMedia] = useState<File | null>(null);
+  const [mobileBannerMedia, setMobileBannerMedia] = useState<File | null>(null);
+
+  // Fetch available tabs on mount
+  useEffect(() => {
+    const fetchTabs = async () => {
+      try {
+        const { data, error } = await api.projectTabs.getAll();
+        if (!error && data) {
+          setAvailableTabs(data);
+        }
+      } catch (err) {
+        console.error("Error fetching tabs:", err);
+      }
+    };
+    fetchTabs();
+  }, []);
 
   // Dosya inputları için handlerlar
   const handleBannerChange = (file: File | null) => {
     setBannerMedia(file);
+  };
+
+  const handleMobileBannerChange = (file: File | null) => {
+    setMobileBannerMedia(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,6 +109,7 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
     try {
       // Resimleri yükle
       let bannerPath = "";
+      let mobileBannerPath = "";
 
       if (bannerMedia) {
         const timestamp = Date.now();
@@ -94,6 +117,14 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
         const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(bannerMedia, fileName);
         if (uploadError) throw uploadError;
         bannerPath = `/uploads/${fileName}`;
+      }
+
+      if (mobileBannerMedia) {
+        const timestamp = Date.now();
+        const fileName = `project-banner-mobile-${timestamp}-${Math.random().toString(36).substring(2)}.${mobileBannerMedia.name.split('.').pop()}`;
+        const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(mobileBannerMedia, fileName);
+        if (uploadError) throw uploadError;
+        mobileBannerPath = `/uploads/${fileName}`;
       }
 
       const projectData = {
@@ -105,9 +136,11 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
         client_name: clientName,
         tab1,
         tab2,
+        project_tab_id: projectTabId || null,
         is_featured: isFeatured,
         featured_order: parseInt(featuredOrder) || 0,
-        banner_media: bannerPath || null
+        banner_media: bannerPath || null,
+        mobile_image_url: mobileBannerPath || null
       };
 
       if (mode === "new") {
@@ -207,11 +240,29 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
           onChange={(value) => setTab2(value)}
         />
 
+        <FormSelect
+          label="Project Tab (Kategori)"
+          value={projectTabId}
+          onChange={(value) => setProjectTabId(value)}
+          options={[
+            { value: "", label: "Kategori Seçiniz" },
+            ...availableTabs.map(tab => ({ value: tab.id, label: tab.name }))
+          ]}
+          helperText="Projenin hangi kategoriye ait olduğunu seçin (filtreleme için)"
+        />
+
         <FormFileInput
-          label="Banner (Görsel veya Video)"
+          label="Desktop Banner (Görsel veya Video)"
           accept="image/*,video/*"
           onChange={handleBannerChange}
-          helperText={bannerMedia ? `Seçilen dosya: ${bannerMedia.name}` : "Proje için banner görseli veya video yükleyin"}
+          helperText={bannerMedia ? `Seçilen dosya: ${bannerMedia.name}` : "Proje için desktop banner görseli veya video yükleyin"}
+        />
+
+        <FormFileInput
+          label="Mobile Banner (Görsel veya Video)"
+          accept="image/*,video/*"
+          onChange={handleMobileBannerChange}
+          helperText={mobileBannerMedia ? `Seçilen dosya: ${mobileBannerMedia.name}` : "Proje için mobile banner görseli veya video yükleyin (opsiyonel)"}
         />
 
         <FormCheckbox
