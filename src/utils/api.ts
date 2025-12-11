@@ -609,6 +609,92 @@ export const api = {
     }
   },
 
+  // Gallery Items
+  galleryItems: {
+    getAll: async () => {
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .select('*')
+        .order('display_order', { ascending: true })
+        .order('created_at', { ascending: false })
+      return { data, error }
+    },
+
+    getById: async (id: string) => {
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .select('*')
+        .eq('id', id)
+        .single()
+      return { data, error }
+    },
+
+    create: async (item: any) => {
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .insert(item)
+        .select()
+        .single()
+      return { data, error }
+    },
+
+    update: async (id: string, updates: any) => {
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single()
+      return { data, error }
+    },
+
+    delete: async (id: string) => {
+      try {
+        // First, get the item to find the image path
+        const { data: item, error: fetchError } = await supabase
+          .from('gallery_items')
+          .select('image')
+          .eq('id', id)
+          .single()
+
+        if (fetchError) {
+          return { error: fetchError }
+        }
+
+        // Delete image from storage if exists (don't fail if storage delete fails)
+        if (item?.image) {
+          try {
+            // Check if it's a storage path (not external URL)
+            const isStoragePath = item.image.startsWith('/uploads/') || 
+                                  item.image.includes('supabase.co/storage');
+            
+            if (isStoragePath) {
+              const { error: storageError } = await storageUtils.deleteFile(item.image);
+              if (storageError) {
+                console.warn('Storage silme hatası (devam ediliyor):', storageError);
+                // Continue with database deletion even if storage deletion fails
+              }
+            }
+          } catch (storageErr) {
+            console.warn('Storage silme hatası (devam ediliyor):', storageErr);
+            // Continue with database deletion even if storage deletion fails
+          }
+        }
+
+        // Delete gallery item record from database
+        const { error } = await supabase
+          .from('gallery_items')
+          .delete()
+          .eq('id', id)
+        
+        return { error }
+      } catch (err) {
+        console.error('Gallery item silme hatası:', err);
+        return { error: err }
+      }
+    }
+  },
+
   // Recognition
   recognition: {
     get: async () => {

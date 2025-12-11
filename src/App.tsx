@@ -39,6 +39,9 @@ import ContactSubmissionsPage from "./pages/contact-submissions";
 import ProjectTabsListPage from "./pages/project-tabs/index";
 import ProjectTabsNewPage from "./pages/project-tabs/new";
 import ProjectTabsEditPage from "./pages/project-tabs/edit";
+import GalleryItemsListPage from "./pages/gallery-items/index";
+import GalleryItemsNewPage from "./pages/gallery-items/new";
+import GalleryItemsEditPage from "./pages/gallery-items/edit";
 
 export default function App() {
   return (
@@ -65,6 +68,9 @@ export default function App() {
               <Route path="project-tabs" element={<ProjectTabsListPage />} />
               <Route path="project-tabs/new" element={<ProjectTabsNewPage />} />
               <Route path="project-tabs/edit/:id" element={<ProjectTabsEditPage />} />
+              <Route path="gallery-items" element={<GalleryItemsListPage />} />
+              <Route path="gallery-items/new" element={<GalleryItemsNewPage />} />
+              <Route path="gallery-items/edit/:id" element={<GalleryItemsEditPage />} />
               <Route path="intro-banners" element={<IntroBannersPage />} />
               <Route path="intro-banners/new" element={<IntroBannersNewPage />} />
               <Route path="intro-banners/edit/:id" element={<IntroBannersEditPage />} />
