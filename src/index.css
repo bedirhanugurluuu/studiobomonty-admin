@@ -143,3 +143,43 @@ textarea {
 textarea::placeholder {
   color: #6b7280 !important;
 }
+
+/* React Quill Editor Stilleri */
+.ql-editor {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+.ql-editor p,
+.ql-editor h1,
+.ql-editor h2,
+.ql-editor h3,
+.ql-editor h4,
+.ql-editor h5,
+.ql-editor h6,
+.ql-editor li,
+.ql-editor blockquote,
+.ql-editor pre,
+.ql-editor code {
+  color: #000000 !important;
+}
+
+.ql-editor::placeholder {
+  color: #6b7280 !important;
+}
+
+.ql-container {
+  background-color: #ffffff !important;
+}
+
+.ql-snow {
+  background-color: #ffffff !important;
+}
+
+.ql-snow .ql-stroke {
+  stroke: #000000 !important;
+}
+
+.ql-snow .ql-fill {
+  fill: #000000 !important;
+}

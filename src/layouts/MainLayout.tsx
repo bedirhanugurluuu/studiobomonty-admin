@@ -17,6 +17,8 @@ export default function MainLayout() {
   const [aboutDropdownOpen, setAboutDropdownOpen] = useState(false);
   const [homeDropdownOpen, setHomeDropdownOpen] = useState(false);
   const [newsDropdownOpen, setNewsDropdownOpen] = useState(false);
+  const [projectsDropdownOpen, setProjectsDropdownOpen] = useState(false);
+  const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoText, setLogoText] = useState<string>("SB");
 
@@ -39,6 +41,18 @@ export default function MainLayout() {
   const isNewsPage = breadcrumbs.some(breadcrumb =>
     breadcrumb.name === 'Haberler' ||
     breadcrumb.name === 'Journal Banner'
+  );
+
+  // Projeler dropdown kontrolü
+  const isProjectsPage = breadcrumbs.some(breadcrumb =>
+    breadcrumb.name === 'Projeler' ||
+    breadcrumb.name === 'Project Tabs'
+  );
+
+  // İletişim dropdown kontrolü
+  const isContactPage = breadcrumbs.some(breadcrumb =>
+    breadcrumb.name === 'İletişim' ||
+    breadcrumb.name === 'İletişim Formu'
   );
 
   // Header settings'den logo'yu çek
@@ -75,17 +89,19 @@ export default function MainLayout() {
     if (isNewsPage && !newsDropdownOpen) {
       setNewsDropdownOpen(true);
     }
-  }, [isAboutPage, isHomePage, isNewsPage, aboutDropdownOpen, homeDropdownOpen, newsDropdownOpen]);
+    if (isProjectsPage && !projectsDropdownOpen) {
+      setProjectsDropdownOpen(true);
+    }
+    if (isContactPage && !contactDropdownOpen) {
+      setContactDropdownOpen(true);
+    }
+  }, [isAboutPage, isHomePage, isNewsPage, isProjectsPage, isContactPage, aboutDropdownOpen, homeDropdownOpen, newsDropdownOpen, projectsDropdownOpen, contactDropdownOpen]);
 
   const menuItems = [
     { name: "Dashboard", path: "/admin/dashboard", icon: <Home size={18} /> },
     { name: "Header", path: "/admin/header", icon: <Settings size={18} /> },
     { name: "Footer", path: "/admin/footer", icon: <Layout size={18} /> },
-    { name: "Projeler", path: "/admin/projects", icon: <Folder size={18} /> },
-    { name: "Project Tabs", path: "/admin/project-tabs", icon: <Folder size={18} /> },
     { name: "Gallery Items", path: "/admin/gallery-items", icon: <Image size={18} /> },
-    { name: "İletişim", path: "/admin/contact", icon: <FileText size={18} /> },
-    { name: "İletişim Formu", path: "/admin/contact-submissions", icon: <FileText size={18} /> },
     { name: "IP Yönetimi", path: "/admin/ip-management", icon: <Shield size={18} /> },
   ];
 
@@ -105,6 +121,16 @@ export default function MainLayout() {
     { name: "Tanınma", path: "/admin/recognition", icon: <Award size={16} /> },
     { name: "Müşteriler", path: "/admin/clients", icon: <Briefcase size={16} /> },
     { name: "Latest Projects Banner", path: "/admin/latest-projects-banner", icon: <ImageIcon size={16} /> },
+  ];
+
+  const projectsSubmenuItems = [
+    { name: "Projeler", path: "/admin/projects", icon: <Folder size={16} /> },
+    { name: "Project Tabs", path: "/admin/project-tabs", icon: <Folder size={16} /> },
+  ];
+
+  const contactSubmenuItems = [
+    { name: "İletişim", path: "/admin/contact", icon: <FileText size={16} /> },
+    { name: "İletişim Formu", path: "/admin/contact-submissions", icon: <FileText size={16} /> },
   ];
 
   const handleLogout = () => {
@@ -241,6 +267,98 @@ export default function MainLayout() {
               {newsDropdownOpen && (
                 <ul className="mt-2 ml-4 space-y-1">
                   {newsSubmenuItems.map(({ name, path, icon }) => (
+                    <li key={path}>
+                      <NavLink
+                        to={path}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                            isActive 
+                              ? "bg-primary text-primary-content" 
+                              : "hover:bg-base-300"
+                          }`
+                        }
+                        onClick={() => {
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        {icon}
+                        {name}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+
+            {/* Projeler Dropdown */}
+            <li className="mb-2">
+              <button
+                onClick={() => setProjectsDropdownOpen(!projectsDropdownOpen)}
+                className={`flex items-center justify-between w-full rounded-lg transition-colors ${
+                  projectsDropdownOpen ? "bg-primary text-primary-content" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Folder size={18} />
+                  Projeler
+                </div>
+                <ChevronDown 
+                  size={16} 
+                  className={`transition-transform duration-200 ${
+                    projectsDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              
+              {projectsDropdownOpen && (
+                <ul className="mt-2 ml-4 space-y-1">
+                  {projectsSubmenuItems.map(({ name, path, icon }) => (
+                    <li key={path}>
+                      <NavLink
+                        to={path}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                            isActive 
+                              ? "bg-primary text-primary-content" 
+                              : "hover:bg-base-300"
+                          }`
+                        }
+                        onClick={() => {
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        {icon}
+                        {name}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+
+            {/* İletişim Dropdown */}
+            <li className="mb-2">
+              <button
+                onClick={() => setContactDropdownOpen(!contactDropdownOpen)}
+                className={`flex items-center justify-between w-full rounded-lg transition-colors ${
+                  contactDropdownOpen ? "bg-primary text-primary-content" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileText size={18} />
+                  İletişim
+                </div>
+                <ChevronDown 
+                  size={16} 
+                  className={`transition-transform duration-200 ${
+                    contactDropdownOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              
+              {contactDropdownOpen && (
+                <ul className="mt-2 ml-4 space-y-1">
+                  {contactSubmenuItems.map(({ name, path, icon }) => (
                     <li key={path}>
                       <NavLink
                         to={path}

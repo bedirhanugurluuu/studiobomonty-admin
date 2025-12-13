@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { api } from '../../utils/api';
 import { storageUtils } from '../../utils/supabaseStorage';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -31,145 +33,82 @@ export default function NewsForm() {
   const [fetching, setFetching] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [originalContent, setOriginalContent] = useState<string>(''); // Eski içeriği saklamak için
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [originalContent, setOriginalContent] = useState<string>('');
+  const quillRef = useRef<ReactQuill>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // HTML toolbar fonksiyonu
-  const insertHTML = (openTag: string, closeTag: string) => {
-    if (!textareaRef.current) return;
-    
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = formData.content.substring(start, end);
-    
-    const newContent = 
-      formData.content.substring(0, start) + 
-      openTag + selectedText + closeTag + 
-      formData.content.substring(end);
-    
-    setFormData(prev => ({ ...prev, content: newContent }));
-    
-    // Cursor pozisyonunu ayarla
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(
-          start + openTag.length,
-          end + openTag.length
-        );
-      }
-    }, 0);
-  };
-
-  // Template ekleme fonksiyonu
-  const insertTemplate = (templateType: 'text-only' | 'with-image') => {
-    if (!textareaRef.current) return;
-    
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
-    let template = '';
-    
-    if (templateType === 'text-only') {
-      // Başlık - Yazı - Başlık - Yazı şeklinde
-      template = '<h2>Başlık 1</h2>\n<p>Buraya yazınızı yazın...</p>\n\n<h2>Başlık 2</h2>\n<p>Buraya yazınızı yazın...</p>\n\n<h2>Başlık 3</h2>\n<p>Buraya yazınızı yazın...</p>';
-    } else {
-      // Başlık - Yazı - Görsel şeklinde
-      template = '<h2>Başlık 1</h2>\n<p>Buraya yazınızı yazın...</p>\n<p><img src="GÖRSEL_URL_BURAYA" alt="Görsel açıklaması" style="max-width: 100%; height: auto; margin: 20px 0;" /></p>\n\n<h2>Başlık 2</h2>\n<p>Buraya yazınızı yazın...</p>\n<p><img src="GÖRSEL_URL_BURAYA" alt="Görsel açıklaması" style="max-width: 100%; height: auto; margin: 20px 0;" /></p>\n\n<h2>Başlık 3</h2>\n<p>Buraya yazınızı yazın...</p>\n<p><img src="GÖRSEL_URL_BURAYA" alt="Görsel açıklaması" style="max-width: 100%; height: auto; margin: 20px 0;" /></p>';
-    }
-    
-    // Mevcut içeriği al
-    const currentContent = formData.content || '';
-    
-    // Template'i mevcut içeriğin sonuna ekle
-    const separator = currentContent.trim() ? '\n\n' : '';
-    const newContent = 
-      formData.content.substring(0, start) + 
-      separator + 
-      template + 
-      formData.content.substring(end);
-    
-    setFormData(prev => ({ ...prev, content: newContent }));
-    
-    // Cursor'ı template'in sonuna taşı
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        const newCursorPos = start + separator.length + template.length;
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
-      }
-    }, 0);
-  };
-
-  // Görsel yükleme fonksiyonu
-  const handleImageUpload = async () => {
+  // Görsel yükleme handler'ı (React Quill için)
+  const imageHandler = useCallback(() => {
     if (!imageInputRef.current) return;
-    
     imageInputRef.current.click();
-  };
+  }, []);
+
+  // React Quill modül yapılandırması (memoize edilmiş)
+  const modules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        [{ 'align': [] }],
+        ['link', 'image'],
+        ['clean']
+      ],
+      handlers: {
+        image: imageHandler
+      }
+    },
+    clipboard: {
+      matchVisual: false,
+    }
+  }), [imageHandler]);
+
+  const formats = useMemo(() => [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'align',
+    'link', 'image'
+  ], []);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Dosya tipini kontrol et
+    if (!file.type.startsWith('image/')) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Hata!',
+        text: 'Lütfen bir görsel dosyası seçin.',
+      });
+      return;
+    }
+
     setUploadingImage(true);
     
     try {
-      // Supabase Storage'a yükle
-      const timestamp = Date.now();
-      const fileName = `news-content-${timestamp}-${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
+      // Temp klasörüne yükle
+      const { data, error: uploadError, publicUrl } = await storageUtils.uploadTempImage(file);
       
-      const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(file, fileName);
-      if (uploadError) throw uploadError;
+      if (uploadError || !publicUrl) {
+        throw uploadError || new Error('Görsel yüklenemedi');
+      }
 
-      // Public URL'i al
-      const publicUrl = `https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${fileName}`;
-      
-      // HTML img tag'ini oluştur
-      const imgTag = `<img src="${publicUrl}" alt="Görsel" style="max-width: 100%; height: auto; margin: 20px 0;" />`;
-      
-      // Cursor pozisyonuna ekle
-      if (!textareaRef.current) return;
-      
-      const textarea = textareaRef.current;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      
-      // Eğer cursor pozisyonunda metin varsa, önce satır sonu ekle
-      const beforeCursor = formData.content.substring(0, start);
-      const afterCursor = formData.content.substring(end);
-      const needsNewLine = beforeCursor.trim() && !beforeCursor.endsWith('\n');
-      const needsNewLineAfter = afterCursor.trim() && !afterCursor.startsWith('\n');
-      
-      const separatorBefore = needsNewLine ? '\n\n' : '';
-      const separatorAfter = needsNewLineAfter ? '\n\n' : '';
-      
-      const newContent = 
-        formData.content.substring(0, start) + 
-        separatorBefore + 
-        imgTag + 
-        separatorAfter + 
-        formData.content.substring(end);
-      
-      setFormData(prev => ({ ...prev, content: newContent }));
-      
-      // Cursor'ı görselin sonuna taşı
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          const newCursorPos = start + separatorBefore.length + imgTag.length + separatorAfter.length;
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      // React Quill editor'a görseli ekle
+      const quill = quillRef.current?.getEditor();
+      if (quill) {
+        const range = quill.getSelection(true);
+        if (range) {
+          quill.insertEmbed(range.index, 'image', publicUrl);
+          quill.setSelection({ index: range.index + 1, length: 0 });
         }
-      }, 0);
+      }
 
       Swal.fire({
         icon: 'success',
         title: 'Başarılı!',
-        text: 'Görsel başarıyla yüklendi ve editöre eklendi.',
+        text: 'Görsel geçici olarak yüklendi. İçeriği kaydettiğinizde kalıcı hale gelecektir.',
         timer: 2000,
         showConfirmButton: false,
       });
@@ -202,10 +141,6 @@ export default function NewsForm() {
       if (error) throw error;
       const news = data;
       
-      console.log('=== NEWS FETCH DEBUG ===');
-      console.log('News data:', news);
-      console.log('Image path from DB:', news.image_path);
-      
       setFormData({
         title: news.title || '',
         category_text: news.category_text || 'DESIGN',
@@ -214,14 +149,12 @@ export default function NewsForm() {
         image_path: news.image_path || '',
       });
       
-      // Eski içeriği sakla (kullanılmayan resimleri silmek için)
+      // Eski içeriği sakla
       setOriginalContent(news.content || '');
       
       if (news.image_path) {
         setCurrentImage(`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${news.image_path}`);
       }
-      
-      console.log('=== END NEWS FETCH DEBUG ===');
     } catch (err) {
       setError('News yüklenirken hata oluştu');
       console.error('Error fetching news:', err);
@@ -240,6 +173,10 @@ export default function NewsForm() {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
+
+  const handleContentChange = useCallback((content: string) => {
+    setFormData(prev => ({ ...prev, content: content || '' }));
+  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -273,98 +210,108 @@ export default function NewsForm() {
       setError(null);
 
       let newImagePath = formData.image_path;
+      let finalContent = formData.content;
+      let journalId = id;
 
-      // Yeni resim yüklendiyse
+      // Yeni resim yüklendiyse (banner image)
       if (imageFile) {
-        console.log('=== NEWS RESİM İŞLEMİ BAŞLADI ===');
-        console.log('FormData image_path:', formData.image_path);
-        console.log('Is editing:', isEditing);
-        console.log('Image file:', imageFile.name);
-        
-        // Eski resmi sil (eğer varsa)
-        if (isEditing && formData.image_path) {
-          console.log('=== NEWS RESİM SİLME İŞLEMİ ===');
-          console.log('Eski resim path:', formData.image_path);
-          console.log('Silme işlemi başlıyor...');
-          await storageUtils.deleteFile(formData.image_path);
-          console.log('=== SİLME İŞLEMİ TAMAMLANDI ===');
-        }
-        
-        // Yeni resmi yükle
         const timestamp = Date.now();
         const fileName = `news-${timestamp}-${Math.random().toString(36).substring(2)}.${imageFile.name.split('.').pop()}`;
-        console.log('Yeni resim yükleniyor:', fileName);
         
         const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(imageFile, fileName);
         if (uploadError) throw uploadError;
         
         newImagePath = fileName;
-        console.log('Resim yüklendi:', newImagePath);
-        console.log('=== NEWS RESİM İŞLEMİ BİTTİ ===');
       }
 
-      // Kullanılmayan resimleri temizle (sadece edit modunda)
-      if (isEditing && originalContent) {
-        console.log('=== CLEANUP UNUSED IMAGES ===');
-        console.log('Original content:', originalContent.substring(0, 200) + '...');
-        console.log('New content:', formData.content.substring(0, 200) + '...');
+      // İçerik kaydedilmeden önce temp görselleri kalıcı klasöre taşı
+      if (isEditing && id) {
+        // Mevcut kayıt için temp görselleri taşı
+        const { updatedContent, error: moveError } = await storageUtils.moveTempImagesToPermanent(
+          formData.content,
+          id
+        );
         
-        try {
-          const { deleted, errors } = await storageUtils.deleteUnusedImages(
-            originalContent,
-            formData.content
-          );
-          
-          if (deleted > 0) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Temizlik Tamamlandı',
-              text: `${deleted} kullanılmayan resim storage'dan silindi.`,
-              timer: 2000,
-              showConfirmButton: false,
-            });
-            console.log(`✓ ${deleted} kullanılmayan resim silindi`);
-          } else {
-            console.log('Kullanılmayan resim bulunamadı');
-          }
-          
-          if (errors.length > 0) {
-            console.warn(`⚠ ${errors.length} resim silinirken hata oluştu:`, errors);
-            Swal.fire({
-              icon: 'warning',
-              title: 'Uyarı',
-              text: `${errors.length} resim silinirken hata oluştu. Console'u kontrol edin.`,
-              timer: 3000,
-            });
-          }
-        } catch (err) {
-          // Resim silme hatası form submit'ini engellemez
-          console.error('❌ Kullanılmayan resimleri temizlerken hata:', err);
+        if (moveError) {
+          console.warn('Temp görseller taşınırken hata:', moveError);
+          // Hata olsa bile devam et
+        } else {
+          finalContent = updatedContent;
         }
-      } else {
-        console.log('Cleanup skipped - isEditing:', isEditing, 'originalContent:', !!originalContent);
       }
 
       // Form data'yı güncelle
       const updateData = {
         ...formData,
+        content: finalContent,
         image_path: newImagePath
       };
 
       if (isEditing) {
-        const { error } = await api.news.update(id!, updateData);
+        const { data, error } = await api.news.update(id!, updateData);
         if (error) throw error;
-        // Güncelleme başarılı olduğunda originalContent'i güncelle
-        setOriginalContent(formData.content);
+        
+        // Güncelleme sonrası temp görselleri taşı (eğer daha önce taşınmadıysa)
+        if (!journalId) {
+          journalId = data?.id?.toString();
+        }
+        
+        if (journalId) {
+          const { updatedContent: finalUpdatedContent, error: moveError } = await storageUtils.moveTempImagesToPermanent(
+            finalContent,
+            journalId
+          );
+          
+          if (!moveError && finalUpdatedContent !== finalContent) {
+            // İçerik güncellendi, tekrar kaydet
+            await api.news.update(id!, {
+              ...updateData,
+              content: finalUpdatedContent
+            });
+          }
+        }
+        
+        setOriginalContent(finalContent);
       } else {
-        const { error } = await api.news.create(updateData);
+        // Yeni kayıt oluştur
+        const { data, error } = await api.news.create(updateData);
         if (error) throw error;
+        
+        // Yeni kayıt oluşturulduktan sonra temp görselleri kalıcı klasöre taşı
+        const newJournalId = data?.id?.toString();
+        if (newJournalId) {
+          const { updatedContent: finalUpdatedContent, error: moveError } = await storageUtils.moveTempImagesToPermanent(
+            finalContent,
+            newJournalId
+          );
+          
+          if (!moveError && finalUpdatedContent !== finalContent) {
+            // İçerik güncellendi, tekrar kaydet
+            await api.news.update(newJournalId, {
+              ...updateData,
+              content: finalUpdatedContent
+            });
+          }
+        }
       }
 
-      navigate('/admin/news');
+      Swal.fire({
+        icon: 'success',
+        title: 'Başarılı!',
+        text: isEditing ? 'Makale güncellendi.' : 'Makale oluşturuldu.',
+        timer: 2000,
+        showConfirmButton: false,
+      }).then(() => {
+        navigate('/admin/news');
+      });
     } catch (err: any) {
       setError(err.message || 'Bir hata oluştu');
       console.error('Error saving news:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Hata!',
+        text: err.message || 'Kayıt sırasında bir hata oluştu.',
+      });
     } finally {
       setLoading(false);
     }
@@ -419,7 +366,6 @@ export default function NewsForm() {
               required
             />
           </div>
-
         </div>
 
         {/* Slug */}
@@ -447,127 +393,11 @@ export default function NewsForm() {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content - React Quill Editor */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             İçerik
           </label>
-          
-          {/* HTML Toolbar */}
-          <div className="mb-2 p-2 bg-gray-50 border border-gray-300 rounded-t-md html-toolbar">
-            <div className="flex flex-wrap gap-2 text-black">
-              <button
-                type="button"
-                onClick={() => insertHTML('<strong>', '</strong>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Kalın"
-              >
-                <strong>B</strong>
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<em>', '</em>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="İtalik"
-              >
-                <em>I</em>
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<u>', '</u>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Altı Çizili"
-              >
-                <u>U</u>
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<h2>', '</h2>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Başlık 2"
-              >
-                H2
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<h3>', '</h3>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Başlık 3"
-              >
-                H3
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<ul><li>', '</li></ul>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Madde Listesi"
-              >
-                • Liste
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<ol><li>', '</li></ol>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Numaralı Liste"
-              >
-                1. Liste
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<p>', '</p>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Paragraf"
-              >
-                P
-              </button>
-              <button
-                type="button"
-                onClick={() => insertHTML('<blockquote>', '</blockquote>')}
-                className="px-2 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
-                title="Alıntı"
-              >
-                "
-              </button>
-              
-              {/* Görsel Yükleme ve Template Butonları */}
-              <div className="border-l border-gray-300 pl-2 ml-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleImageUpload}
-                  disabled={uploadingImage}
-                  className="px-3 py-1 text-sm bg-green-500 text-white border border-green-600 rounded hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Görsel Yükle"
-                >
-                  {uploadingImage ? '⏳ Yükleniyor...' : '🖼️ Görsel Yükle'}
-                </button>
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  className="hidden"
-                />
-                
-                {/* Template Butonları */}
-                <button
-                  type="button"
-                  onClick={() => insertTemplate('text-only')}
-                  className="px-3 py-1 text-xs bg-blue-500 text-white border border-blue-600 rounded hover:bg-blue-600 transition-colors"
-                  title="Başlık - Yazı Template'i"
-                >
-                  📝 Başlık-Yazı
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTemplate('with-image')}
-                  className="px-3 py-1 text-xs bg-purple-500 text-white border border-purple-600 rounded hover:bg-purple-600 transition-colors"
-                  title="Başlık - Yazı - Görsel Template'i"
-                >
-                  🖼️ Başlık-Yazı-Görsel
-                </button>
-              </div>
-            </div>
-          </div>
           
           {uploadingImage && (
             <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
@@ -575,26 +405,46 @@ export default function NewsForm() {
             </div>
           )}
           
-          <textarea
-            ref={textareaRef}
-            name="content"
-            value={formData.content}
-            onChange={handleInputChange}
-            rows={12}
-            className="w-full px-3 py-2 border border-gray-300 rounded-b-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black"
-            placeholder="Makale içeriğini buraya yazın... HTML etiketleri kullanabilirsiniz."
-            style={{ color: '#111827' }}
+          <div className="bg-white">
+            {!fetching && (
+              <ReactQuill
+                ref={quillRef}
+                theme="snow"
+                value={formData.content || ''}
+                onChange={handleContentChange}
+                modules={modules}
+                formats={formats}
+                placeholder="Makale içeriğini buraya yazın..."
+                style={{ minHeight: '400px' }}
+                key={isEditing ? `quill-${id}` : 'quill-new'}
+                bounds="self"
+                preserveWhitespace
+              />
+            )}
+            {fetching && (
+              <div className="min-h-[400px] flex items-center justify-center border border-gray-300 rounded">
+                <LoadingSpinner />
+              </div>
+            )}
+          </div>
+          
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageFileChange}
+            className="hidden"
           />
-
-          <div className="mt-2 text-sm text-white">
-            Toolbar butonlarını kullanarak metni formatlayabilirsiniz. HTML etiketleri de manuel olarak yazabilirsiniz.
+          
+          <div className="mt-2 text-sm text-gray-600">
+            <p>💡 İpucu: Editörde görsel eklemek için toolbar'daki görsel butonunu kullanın. Görseller geçici olarak yüklenir ve içeriği kaydettiğinizde kalıcı hale gelir.</p>
           </div>
         </div>
 
-        {/* Image */}
+        {/* Image (Banner) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Görsel
+            Banner Görseli
           </label>
           <input
             type="file"
@@ -615,20 +465,20 @@ export default function NewsForm() {
 
         {/* Submit Buttons */}
         <div className="flex gap-4">
-                     <button
-             type="submit"
-             disabled={loading}
-             className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition-colors disabled:opacity-50"
-           >
-             {loading ? 'Kaydediliyor...' : (isEditing ? 'Güncelle' : 'Oluştur')}
-           </button>
-           <button
-             type="button"
-             onClick={() => navigate('/admin/news')}
-             className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-md transition-colors"
-           >
-             İptal
-           </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Kaydediliyor...' : (isEditing ? 'Güncelle' : 'Oluştur')}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/news')}
+            className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-md transition-colors"
+          >
+            İptal
+          </button>
         </div>
       </form>
     </div>

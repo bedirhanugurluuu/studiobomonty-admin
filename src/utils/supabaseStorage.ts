@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase'
 import { supabaseAdmin } from '../config/supabaseAdmin'
+import { API_BASE_URL } from '../config/api'
 
 // Supabase Storage utility functions
 export const storageUtils = {
@@ -200,6 +201,108 @@ export const storageUtils = {
     console.log('=== DELETE UNUSED IMAGES END ===');
     
     return { deleted, errors };
+  },
+
+  // Upload temp image (to /uploads/temp/)
+  uploadTempImage: async (file: File): Promise<{ data: any; error: any; publicUrl?: string }> => {
+    try {
+      // Convert file to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const base64 = await base64Promise;
+      
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 15);
+      const extension = file.name.split('.').pop() || 'jpg';
+      const fileName = `temp-${timestamp}-${randomStr}.${extension}`;
+
+      // Call API to upload temp image
+      const response = await fetch(`${API_BASE_URL}/news/upload-temp-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file: base64,
+          fileName: fileName
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload temp image');
+      }
+
+      const result = await response.json();
+      return { 
+        data: result.data, 
+        error: null, 
+        publicUrl: result.publicUrl 
+      };
+    } catch (err: any) {
+      console.error('Temp image upload error:', err);
+      return { data: null, error: err };
+    }
+  },
+
+  // Move temp images to permanent location
+  moveTempImagesToPermanent: async (
+    content: string, 
+    journalId: string | number
+  ): Promise<{ updatedContent: string; error: any }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/news/move-temp-images`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          journalId: journalId.toString()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to move temp images');
+      }
+
+      const result = await response.json();
+      return { 
+        updatedContent: result.updatedContent || content, 
+        error: null 
+      };
+    } catch (err: any) {
+      console.error('Move temp images error:', err);
+      return { updatedContent: content, error: err };
+    }
+  },
+
+  // Extract temp image paths from content
+  extractTempImagePaths: (content: string): string[] => {
+    if (!content) return [];
+    
+    const tempImageRegex = /<img[^>]+src=["']([^"']*\/temp\/[^"']+)["'][^>]*>/gi;
+    const tempImages: string[] = [];
+    let match;
+    
+    while ((match = tempImageRegex.exec(content)) !== null) {
+      const url = match[1];
+      if (url && !tempImages.includes(url)) {
+        tempImages.push(url);
+      }
+    }
+    
+    return tempImages;
   }
 }
 
