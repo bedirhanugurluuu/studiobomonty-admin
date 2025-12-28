@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Form Input Component
 interface FormInputProps {
@@ -132,6 +132,7 @@ interface FormSelectProps {
   options: FormSelectOption[];
   required?: boolean;
   className?: string;
+  helperText?: string;
 }
 
 export function FormSelect({
@@ -140,7 +141,8 @@ export function FormSelect({
   onChange,
   options,
   required = false,
-  className = ''
+  className = '',
+  helperText
 }: FormSelectProps) {
   return (
     <div className={className}>
@@ -160,6 +162,9 @@ export function FormSelect({
           </option>
         ))}
       </select>
+      {helperText && (
+        <p className="text-sm text-gray-500 mt-2">{helperText}</p>
+      )}
     </div>
   );
 }
@@ -259,6 +264,127 @@ export function FormCheckbox({
       </div>
       {helperText && (
         <p className="text-sm text-gray-500 mt-1 ml-6">{helperText}</p>
+      )}
+    </div>
+  );
+}
+
+// Form Multi-Select Component (Dropdown with Checkboxes)
+interface FormMultiSelectOption {
+  value: string | number;
+  label: string;
+}
+
+interface FormMultiSelectProps {
+  label: string;
+  values: (string | number)[];
+  onChange: (values: (string | number)[]) => void;
+  options: FormMultiSelectOption[];
+  required?: boolean;
+  className?: string;
+  helperText?: string;
+}
+
+export function FormMultiSelect({
+  label,
+  values,
+  onChange,
+  options,
+  required = false,
+  className = '',
+  helperText
+}: FormMultiSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = (optionValue: string | number) => {
+    if (values.includes(optionValue)) {
+      onChange(values.filter(v => v !== optionValue));
+    } else {
+      onChange([...values, optionValue]);
+    }
+  };
+
+  // Seçili kategorilerin isimlerini al
+  const selectedLabels = options
+    .filter(opt => values.includes(opt.value))
+    .map(opt => opt.label);
+
+  // Dropdown dışına tıklanınca kapat
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className={className} ref={dropdownRef}>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        {label} {required && '*'}
+      </label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left bg-white flex items-center justify-between"
+        >
+          <span className="text-sm text-gray-700 truncate">
+            {selectedLabels.length > 0 
+              ? `${selectedLabels.length} kategori seçildi: ${selectedLabels.join(', ')}`
+              : 'Kategori seçiniz...'
+            }
+          </span>
+          <svg
+            className={`w-5 h-5 text-gray-500 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            {options.length === 0 ? (
+              <div className="p-4 text-sm text-gray-500">Kategori bulunamadı</div>
+            ) : (
+              <div className="p-2">
+                {options.map((option) => (
+                  <div
+                    key={option.value}
+                    className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
+                    onClick={() => handleToggle(option.value)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={values.includes(option.value)}
+                      onChange={() => handleToggle(option.value)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <label className="ml-2 block text-sm text-gray-700 cursor-pointer flex-1">
+                      {option.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {helperText && (
+        <p className="text-sm text-gray-500 mt-2">{helperText}</p>
       )}
     </div>
   );

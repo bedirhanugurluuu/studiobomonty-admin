@@ -999,5 +999,42 @@ export const api = {
         .eq('id', id)
       return { error }
     }
+  },
+
+  // Project Project Tabs (Junction Table)
+  projectProjectTabs: {
+    getByProjectId: async (projectId: string) => {
+      const { data, error } = await supabase
+        .from('project_project_tabs')
+        .select('project_tab_id')
+        .eq('project_id', projectId)
+      return { data, error }
+    },
+
+    setForProject: async (projectId: string, tabIds: (string | number)[]) => {
+      // Önce mevcut kayıtları sil
+      const { error: deleteError } = await supabase
+        .from('project_project_tabs')
+        .delete()
+        .eq('project_id', projectId)
+      
+      if (deleteError) return { error: deleteError }
+
+      // Yeni kayıtları ekle
+      if (tabIds.length > 0) {
+        const records = tabIds.map(tabId => ({
+          project_id: projectId,
+          project_tab_id: tabId
+        }))
+        
+        const { data, error } = await supabase
+          .from('project_project_tabs')
+          .insert(records)
+          .select()
+        return { data, error }
+      }
+
+      return { data: null, error: null }
+    }
   }
 }

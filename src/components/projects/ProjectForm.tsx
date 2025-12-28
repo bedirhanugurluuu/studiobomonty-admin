@@ -4,7 +4,7 @@ import { api } from "../../utils/api";
 import { storageUtils } from "../../utils/supabaseStorage";
 import Swal from "sweetalert2";
 import { FormLayout } from "../common/PageLayout";
-import { FormInput, FormTextarea, FormFileInput, FormCheckbox, FormButton, FormActions, FormSelect } from "../common/FormComponents";
+import { FormInput, FormTextarea, FormFileInput, FormCheckbox, FormButton, FormActions, FormSelect, FormMultiSelect } from "../common/FormComponents";
 
 interface ProjectResponse {
   id: number;
@@ -30,7 +30,7 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
   const [clientName, setClientName] = useState("");
   const [tab1, setTab1] = useState("");
   const [tab2, setTab2] = useState("");
-  const [projectTabId, setProjectTabId] = useState<string>("");
+  const [projectTabIds, setProjectTabIds] = useState<(string | number)[]>([]);
   const [availableTabs, setAvailableTabs] = useState<any[]>([]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [featuredOrder, setFeaturedOrder] = useState<string>("");
@@ -136,16 +136,19 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
         client_name: clientName,
         tab1,
         tab2,
-        project_tab_id: projectTabId || null,
         is_featured: isFeatured,
         featured_order: parseInt(featuredOrder) || 0,
         banner_media: bannerPath || null,
         mobile_image_url: mobileBannerPath || null
       };
 
+      let projectId: string;
+
       if (mode === "new") {
         const { data, error } = await api.projects.create(projectData);
         if (error) throw error;
+        if (!data) throw new Error("Proje oluşturulamadı");
+        projectId = data.id;
       } else {
         // Edit mode için slug'ı kullanarak projeyi bul ve güncelle
         const { data: existingProjects, error: getError } = await api.projects.getAll();
@@ -156,8 +159,35 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
         const existingProject = existingProjects.find(p => p.slug === slug);
         if (!existingProject) throw new Error("Proje bulunamadı");
         
-        const { error } = await api.projects.update(existingProject.id.toString(), projectData);
+        projectId = existingProject.id;
+        const { error } = await api.projects.update(projectId.toString(), projectData);
         if (error) throw error;
+      }
+
+      // Project tabs'ı kaydet
+      if (projectId && projectTabIds.length > 0) {
+        console.log("Kategoriler kaydediliyor:", { projectId, projectTabIds });
+        const { error: tabsError } = await api.projectProjectTabs.setForProject(projectId, projectTabIds);
+        if (tabsError) {
+          console.error("Kategoriler kaydedilemedi:", tabsError);
+          Swal.fire({
+            icon: "warning",
+            title: "Uyarı!",
+            text: `Proje kaydedildi ancak kategoriler kaydedilemedi: ${tabsError.message || 'Bilinmeyen hata'}`,
+            timer: 3000,
+            showConfirmButton: false,
+          });
+        } else {
+          console.log("Kategoriler başarıyla kaydedildi");
+        }
+      } else if (projectTabIds.length === 0) {
+        // Kategori seçilmemişse mevcut kategorileri sil
+        if (projectId) {
+          const { error: tabsError } = await api.projectProjectTabs.setForProject(projectId, []);
+          if (tabsError) {
+            console.error("Kategoriler silinemedi:", tabsError);
+          }
+        }
       }
 
       Swal.fire({
@@ -240,15 +270,12 @@ const ProjectForm: React.FC<{ mode: "new" | "edit" }> = ({ mode }) => {
           onChange={(value) => setTab2(value)}
         />
 
-        <FormSelect
-          label="Project Tab (Kategori)"
-          value={projectTabId}
-          onChange={(value) => setProjectTabId(value)}
-          options={[
-            { value: "", label: "Kategori Seçiniz" },
-            ...availableTabs.map(tab => ({ value: tab.id, label: tab.name }))
-          ]}
-          helperText="Projenin hangi kategoriye ait olduğunu seçin (filtreleme için)"
+        <FormMultiSelect
+          label="Project Tabs (Kategoriler)"
+          values={projectTabIds}
+          onChange={(values) => setProjectTabIds(values)}
+          options={availableTabs.map(tab => ({ value: tab.id, label: tab.name }))}
+          helperText="Projenin hangi kategorilere ait olduğunu seçin (birden fazla seçim yapabilirsiniz)"
         />
 
         <FormFileInput

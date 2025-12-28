@@ -7,7 +7,7 @@ import { storageUtils } from "../../utils/supabaseStorage";
 import { Project } from "../../types/Project";
 import Swal from "sweetalert2";
 import { FormLayout } from "../../components/common/PageLayout";
-import { FormInput, FormTextarea, FormFileInput, FormSelect, FormCheckbox, FormButton, FormActions } from "../../components/common/FormComponents";
+import { FormInput, FormTextarea, FormFileInput, FormSelect, FormCheckbox, FormButton, FormActions, FormMultiSelect } from "../../components/common/FormComponents";
 
 const ProjectsEditPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +24,7 @@ const ProjectsEditPage = () => {
   const [clientName, setClientName] = useState("");
   const [tab1, setTab1] = useState("");
   const [tab2, setTab2] = useState("");
-  const [projectTabId, setProjectTabId] = useState<string>("");
+  const [projectTabIds, setProjectTabIds] = useState<(string | number)[]>([]);
   const [availableTabs, setAvailableTabs] = useState<any[]>([]);
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -58,12 +58,19 @@ const ProjectsEditPage = () => {
         setClientName(res.data.client_name || "");
         setTab1(res.data.tab1 || "");
         setTab2(res.data.tab2 || "");
-        setProjectTabId(res.data.project_tab_id || "");
-        
         // Fetch available tabs
         const { data: tabsData, error: tabsError } = await api.projectTabs.getAll();
         if (!tabsError && tabsData) {
           setAvailableTabs(tabsData);
+        }
+        
+        // Fetch project tabs (categories) for this project
+        if (id) {
+          const { data: projectTabsData, error: projectTabsError } = await api.projectProjectTabs.getByProjectId(id);
+          if (!projectTabsError && projectTabsData) {
+            const tabIds = projectTabsData.map((item: any) => item.project_tab_id);
+            setProjectTabIds(tabIds);
+          }
         }
         
         // Team members'ı çek
@@ -156,7 +163,7 @@ const ProjectsEditPage = () => {
       if (clientName !== project?.client_name) updateData.client_name = clientName;
       if (tab1 !== project?.tab1) updateData.tab1 = tab1;
       if (tab2 !== project?.tab2) updateData.tab2 = tab2;
-      if (projectTabId !== project?.project_tab_id) updateData.project_tab_id = projectTabId || null;
+      // Project tabs will be handled separately via junction table
       
       // Resim path'lerini ekle
       if (newBanner) updateData.banner_media = newBannerPath;
@@ -175,6 +182,15 @@ const ProjectsEditPage = () => {
       if (error) {
         console.error('Update error:', error);
         throw error;
+      }
+
+      // Project tabs'ı kaydet
+      if (id) {
+        const { error: tabsError } = await api.projectProjectTabs.setForProject(id, projectTabIds);
+        if (tabsError) {
+          console.error("Kategoriler kaydedilemedi:", tabsError);
+          // Hata olsa bile devam et, kritik değil
+        }
       }
 
       Swal.fire({
@@ -623,15 +639,12 @@ const ProjectsEditPage = () => {
           onChange={(value) => setTab2(value)}
         />
 
-        <FormSelect
-          label="Project Tab (Kategori)"
-          value={projectTabId}
-          onChange={(value) => setProjectTabId(value)}
-          options={[
-            { value: "", label: "Kategori Seçiniz" },
-            ...availableTabs.map(tab => ({ value: tab.id, label: tab.name }))
-          ]}
-          helperText="Projenin hangi kategoriye ait olduğunu seçin (filtreleme için)"
+        <FormMultiSelect
+          label="Project Tabs (Kategoriler)"
+          values={projectTabIds}
+          onChange={(values) => setProjectTabIds(values)}
+          options={availableTabs.map(tab => ({ value: tab.id, label: tab.name }))}
+          helperText="Projenin hangi kategorilere ait olduğunu seçin (birden fazla seçim yapabilirsiniz)"
         />
 
         <FormSelect
