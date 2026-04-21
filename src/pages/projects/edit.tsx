@@ -1065,7 +1065,7 @@ const ProjectsEditPage = () => {
                 </span>
                 <button
                   onClick={() => handleDeleteTeamMember(member.id)}
-                  className="bg-red-600 text-white border-none px-3 py-1 rounded text-xs cursor-pointer hover:bg-red-700 transition-colors"
+                  className="bg-red-600 text-white border-none px-3 py-1 rounded  text-xs cursor-pointer hover:bg-red-700 transition-colors"
                 >
                   Sil
                 </button>
