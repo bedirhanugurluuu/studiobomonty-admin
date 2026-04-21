@@ -4,6 +4,7 @@ export interface Project {
   subtitle: string;
   slug: string;
   banner_media?: string; // backend'de banner_media olarak saklanıyor
+  mobile_image_url?: string;
   featured: boolean; // is_featured değil, featured
   is_featured: boolean;
   featured_order: number;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, ChangeEvent } from "react";
+import React, { useEffect, useMemo, useState, ChangeEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from '../../utils/api';
 import { useBreadcrumb } from "../../contexts/BreadcrumbContext";
@@ -15,7 +15,9 @@ const ProjectsEditPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
   const [gallery, setGallery] = useState<any[]>([]);
-  const [newImages, setNewImages] = useState<File[]>([]);
+  const [uploadMode, setUploadMode] = useState<"horizontal" | "vertical" | null>(null);
+  const [slotFiles, setSlotFiles] = useState<Record<number, File | null>>({});
+  const [slotInputResetKey, setSlotInputResetKey] = useState(0);
   const [newBanner, setNewBanner] = useState<File | null>(null);
   const [newMobileBanner, setNewMobileBanner] = useState<File | null>(null);
   const [galleryOrderValues, setGalleryOrderValues] = useState<Record<string, number>>({});
@@ -210,12 +212,6 @@ const ProjectsEditPage = () => {
     }
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setNewImages(Array.from(e.target.files));
-    }
-  };
-
   const handleBannerChange = (file: File | null) => {
     setNewBanner(file);
   };
@@ -224,21 +220,87 @@ const ProjectsEditPage = () => {
     setNewMobileBanner(file);
   };
 
+  const getCurrentMaxGalleryOrder = () => {
+    if (!gallery.length) return -1;
+    return Math.max(
+      ...gallery.map((item) => (typeof item.sort === "number" ? item.sort : parseInt(item.sort) || 0))
+    );
+  };
+
+  const handleSelectUploadMode = (mode: "horizontal" | "vertical") => {
+    setUploadMode(mode);
+    setSlotInputResetKey((prev) => prev + 1);
+    if (mode === "horizontal") {
+      setSlotFiles({ 0: null });
+    } else {
+      const maxOrder = getCurrentMaxGalleryOrder();
+      const hasInitialVerticalOrders = gallery.some((item) => {
+        const order = typeof item.sort === "number" ? item.sort : parseInt(item.sort) || 0;
+        return order === 2 || order === 3;
+      });
+
+      // İlk dikey çifti 2-3, sonrakiler max+1 ve max+2 olacak şekilde ilerler
+      if (!hasInitialVerticalOrders && maxOrder <= 2) {
+        setSlotFiles({ 2: null, 3: null });
+      } else {
+        const startOrder = Math.max(maxOrder + 1, 4);
+        setSlotFiles({ [startOrder]: null, [startOrder + 1]: null });
+      }
+    }
+  };
+
+  const handleSlotFileChange = (order: number, file: File | null) => {
+    setSlotFiles((prev) => ({
+      ...prev,
+      [order]: file,
+    }));
+  };
+
+  const handleOpenUploadForOrder = (order: number) => {
+    setSlotInputResetKey((prev) => prev + 1);
+    if (order === 0) {
+      setUploadMode("horizontal");
+      setSlotFiles({ 0: null });
+      return;
+    }
+
+    const startOrder = order % 2 === 0 ? order : order - 1;
+    setUploadMode("vertical");
+    setSlotFiles({ [startOrder]: null, [startOrder + 1]: null });
+  };
+
   const handleGalleryUpload = async () => {
-    if (!newImages.length) {
+    const selectedEntries = Object.entries(slotFiles).filter(([, file]) => !!file);
+    if (!selectedEntries.length) {
       Swal.fire({
         icon: "warning",
         title: "Uyarı!",
-        text: "Yüklenecek görsel seçilmedi.",
+        text: "Yüklenecek görsel seçilmedi. Lütfen en az bir slot seçin.",
       });
       return;
     }
 
     try {
       const uploadedImages: any[] = [];
-      
-      // Her resmi Supabase Storage'a yükle ve project_gallery tablosuna kaydet
-      for (const file of newImages) {
+
+      // Slot order çakışmalarında mevcut görselleri koru (sıfır risk yaklaşımı)
+      for (const [orderKey] of selectedEntries) {
+        const order = Number(orderKey);
+        const hasExistingImageForOrder = gallery.some((item) => (parseInt(item.sort) || 0) === order);
+        if (hasExistingImageForOrder) {
+          Swal.fire({
+            icon: "warning",
+            title: "Order Dolu",
+            text: `${order}. order'da zaten bir görsel var. Önce mevcut görseli silin veya order değiştirin.`,
+          });
+          return;
+        }
+      }
+
+      // Sadece seçilen slotlara görsel yükle ve project_gallery tablosuna kaydet
+      for (const [orderKey, file] of selectedEntries) {
+        if (!file) continue;
+        const order = Number(orderKey);
         const timestamp = Date.now();
         const fileName = `project-gallery-${timestamp}-${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
         
@@ -251,7 +313,7 @@ const ProjectsEditPage = () => {
         const { data: galleryData, error: galleryError } = await api.projectGallery.create({
           project_id: id,
           image_path: imagePath,
-          sort: gallery.length + uploadedImages.length
+          sort: order
         });
         
         if (galleryError) throw galleryError;
@@ -279,7 +341,12 @@ const ProjectsEditPage = () => {
         showConfirmButton: false,
       });
       
-      setNewImages([]);
+      if (uploadMode === "horizontal") {
+        setSlotFiles({ 0: null });
+      } else if (uploadMode === "vertical") {
+        setSlotFiles({});
+      }
+      setSlotInputResetKey((prev) => prev + 1);
       setGallery(updatedGallery);
     } catch (err) {
       console.error("Gallery upload hatası:", err);
@@ -523,6 +590,107 @@ const ProjectsEditPage = () => {
     }
   };
 
+  const sortedGallery = useMemo(() => {
+    return [...gallery].sort((a, b) => (parseInt(a.sort) || 0) - (parseInt(b.sort) || 0));
+  }, [gallery]);
+
+  const horizontalGalleryItem = useMemo(() => {
+    return sortedGallery.find((item) => (parseInt(item.sort) || 0) === 0) || null;
+  }, [sortedGallery]);
+
+  const verticalRows = useMemo(() => {
+    const rowStarts = new Set<number>();
+
+    sortedGallery
+      .filter((item) => (parseInt(item.sort) || 0) >= 2)
+      .forEach((item) => {
+        const order = parseInt(item.sort) || 0;
+        rowStarts.add(order % 2 === 0 ? order : order - 1);
+      });
+
+    return Array.from(rowStarts)
+      .sort((a, b) => a - b)
+      .map((startOrder) => ({
+        startOrder,
+        leftItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder) || null,
+        rightItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder + 1) || null,
+      }));
+  }, [sortedGallery]);
+
+  const renderGalleryCard = (img: any, idx: number) => {
+    const imageUrl = getImageUrl(img.image_path || "");
+    const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(img.image_path || "");
+
+    return (
+      <div key={img.id || idx} className="relative group flex flex-col">
+        {isVideo ? (
+          <div className="w-full h-40 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 text-sm relative overflow-hidden">
+            <span>🎥 Video</span>
+            <video
+              src={imageUrl}
+              className="absolute inset-0 w-full h-full rounded-lg object-cover opacity-0 transition-opacity duration-300"
+              onLoadedData={(e) => {
+                e.currentTarget.style.opacity = "1";
+              }}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+              controls
+              muted
+            />
+          </div>
+        ) : (
+          <img
+            src={imageUrl}
+            alt={`galeri-${idx}`}
+            className="w-full h-40 object-cover rounded-lg border border-gray-300"
+            onError={(e) => {
+              e.currentTarget.src = getFallbackImageUrl();
+            }}
+          />
+        )}
+        <button
+          onClick={() => handleDeleteImage(img)}
+          className="absolute top-2 right-2 bg-black bg-opacity-60 text-white border-none px-2 py-1 text-xs rounded cursor-pointer hover:bg-opacity-80 transition-opacity"
+        >
+          Sil
+        </button>
+        <div className="mt-2">
+          <label className="block text-xs text-gray-600 mb-1">Sıra:</label>
+          <input
+            type="number"
+            min="0"
+            value={(() => {
+              const key = img.id ? String(img.id) : `${img.project_id}_${img.image_path}`;
+              return galleryOrderValues[key] ?? parseInt(img.sort) ?? idx;
+            })()}
+            onChange={(e) => {
+              const newOrder = parseInt(e.target.value) || 0;
+              const key = img.id ? String(img.id) : `${img.project_id}_${img.image_path}`;
+              setGalleryOrderValues(prev => ({
+                ...prev,
+                [key]: newOrder
+              }));
+            }}
+            onBlur={(e) => {
+              const newOrder = parseInt(e.target.value) || 0;
+              const currentOrder = parseInt(img.sort) ?? idx;
+              if (newOrder !== currentOrder) {
+                handleOrderChange(img, newOrder);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              }
+            }}
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+    );
+  };
+
   if (!project) return <div className="p-6">Proje bulunamadı.</div>;
 
   return (
@@ -677,96 +845,178 @@ const ProjectsEditPage = () => {
       <h2 className="text-xl text-black font-semibold mb-4">Galeri Görselleri</h2>
 
       <div className="mb-4">
-        <input 
-          type="file" 
-          multiple 
-          onChange={handleFileChange} 
-          className="mb-3 w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
+        <div className="flex flex-wrap gap-3 mb-4">
+          <FormButton
+            type="button"
+            onClick={() => handleSelectUploadMode("horizontal")}
+            variant={uploadMode === "horizontal" ? "primary" : "secondary"}
+          >
+            Yatay Görsel
+          </FormButton>
+          <FormButton
+            type="button"
+            onClick={() => handleSelectUploadMode("vertical")}
+            variant={uploadMode === "vertical" ? "primary" : "secondary"}
+          >
+            Dikey Görsel
+          </FormButton>
+        </div>
+
+        {uploadMode === "horizontal" && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Order 0 (Yatay)</label>
+            <input
+              key={`horizontal-0-${slotInputResetKey}`}
+              type="file"
+              accept="image/*,video/*"
+              onChange={(e) => handleSlotFileChange(0, e.target.files?.[0] || null)}
+              className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-sm text-gray-600 mt-2">
+              {slotFiles[0] ? `Seçilen: ${slotFiles[0]?.name}` : "Dosya seçilmedi"}
+            </p>
+          </div>
+        )}
+
+        {uploadMode === "vertical" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0] ?? "-"} (Sol)
+              </label>
+              <input
+                key={`vertical-left-${slotInputResetKey}`}
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => {
+                  const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                  if (typeof firstOrder === "number") {
+                    handleSlotFileChange(firstOrder, e.target.files?.[0] || null);
+                  }
+                }}
+                className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-sm text-gray-600 mt-2">
+                {(() => {
+                const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                if (typeof firstOrder !== "number" || !slotFiles[firstOrder]) return "Dosya seçilmedi";
+                return `Seçilen: ${slotFiles[firstOrder]?.name}`;
+                })()}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1] ?? "-"} (Sağ)
+              </label>
+              <input
+                key={`vertical-right-${slotInputResetKey}`}
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => {
+                  const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
+                  if (typeof secondOrder === "number") {
+                    handleSlotFileChange(secondOrder, e.target.files?.[0] || null);
+                  }
+                }}
+                className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-sm text-gray-600 mt-2">
+                {(() => {
+                const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
+                if (typeof secondOrder !== "number" || !slotFiles[secondOrder]) return "Dosya seçilmedi";
+                return `Seçilen: ${slotFiles[secondOrder]?.name}`;
+                })()}
+              </p>
+            </div>
+          </div>
+        )}
+
         <FormButton type="button" onClick={handleGalleryUpload} variant="primary">
           Galeri Yükle
         </FormButton>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
-
+      <div className="space-y-6 mt-4">
         {gallery.length > 0 ? (
-          gallery.map((img, idx) => {
-            const filename = img.image_path?.replace(/\\/g, "/") || "";
-            const imageUrl = getImageUrl(img.image_path || "");
-            const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(img.image_path || "");
-
-            return (
-              <div key={img.id || idx} className="relative group flex flex-col">
-                {isVideo ? (
-                  <div className="w-full h-40 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 text-sm relative overflow-hidden">
-                    <span>🎥 Video</span>
-                    <video
-                      src={imageUrl}
-                      className="absolute inset-0 w-full h-full rounded-lg object-cover opacity-0 transition-opacity duration-300"
-                      onLoadedData={(e) => {
-                        e.currentTarget.style.opacity = "1";
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                      controls
-                      muted
-                    />
-                  </div>
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt={`galeri-${idx}`}
-                    className="w-full h-40 object-cover rounded-lg border border-gray-300"
-                    onError={(e) => {
-                      e.currentTarget.src = getFallbackImageUrl();
-                    }}
-                  />
-                )}
-                <button
-                  onClick={() => handleDeleteImage(img)}
-                  className="absolute top-2 right-2 bg-black bg-opacity-60 text-white border-none px-2 py-1 text-xs rounded cursor-pointer hover:bg-opacity-80 transition-opacity"
-                >
-                  Sil
-                </button>
-                <div className="mt-2">
-                  <label className="block text-xs text-gray-600 mb-1">Sıra:</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={(() => {
-                      const key = img.id ? String(img.id) : `${img.project_id}_${img.image_path}`;
-                      return galleryOrderValues[key] ?? parseInt(img.sort) ?? idx;
-                    })()}
-                    onChange={(e) => {
-                      const newOrder = parseInt(e.target.value) || 0;
-                      const key = img.id ? String(img.id) : `${img.project_id}_${img.image_path}`;
-                      setGalleryOrderValues(prev => ({
-                        ...prev,
-                        [key]: newOrder
-                      }));
-                    }}
-                    onBlur={(e) => {
-                      const newOrder = parseInt(e.target.value) || 0;
-                      const currentOrder = parseInt(img.sort) ?? idx;
-                      if (newOrder !== currentOrder) {
-                        handleOrderChange(img, newOrder);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+          <>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Yatay Slot (Order 0)</h3>
+              {horizontalGalleryItem ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {renderGalleryCard(horizontalGalleryItem, 0)}
                 </div>
-              </div>
-            );
-          })
+              ) : (
+                <div className="text-sm text-gray-500 p-4 border border-dashed border-gray-300 rounded-lg">
+                  Order 0 için görsel yok.
+                  <div className="mt-3">
+                    <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(0)}>
+                      Order 0'a Görsel Yükle
+                    </FormButton>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Dikey Slotlar (2-3, 4-5, 6-7...)</h3>
+              {verticalRows.length > 0 ? (
+                <div className="space-y-4">
+                  {verticalRows.map((row) => (
+                    <div key={row.startOrder} className="p-3 border border-gray-200 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-3">
+                        Satır: {row.startOrder} (sol) - {row.startOrder + 1} (sağ)
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          {row.leftItem ? (
+                            renderGalleryCard(row.leftItem, row.startOrder)
+                          ) : (
+                            <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
+                              <span>Order {row.startOrder} boş</span>
+                              <FormButton
+                                type="button"
+                                variant="secondary"
+                                onClick={() => handleOpenUploadForOrder(row.startOrder)}
+                              >
+                                Bu Slota Yükle
+                              </FormButton>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          {row.rightItem ? (
+                            renderGalleryCard(row.rightItem, row.startOrder + 1)
+                          ) : (
+                            <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
+                              <span>Order {row.startOrder + 1} boş</span>
+                              <FormButton
+                                type="button"
+                                variant="secondary"
+                                onClick={() => handleOpenUploadForOrder(row.startOrder + 1)}
+                              >
+                                Bu Slota Yükle
+                              </FormButton>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500 p-4 border border-dashed border-gray-300 rounded-lg">
+                  Henüz dikey slot görseli yok.
+                  <div className="mt-3 flex gap-2">
+                    <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(2)}>
+                      2-3 Slotunu Aç
+                    </FormButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         ) : (
-          <div className="col-span-full text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-gray-500">
             Henüz galeri görseli yüklenmemiş.
           </div>
         )}
