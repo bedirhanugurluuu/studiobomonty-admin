@@ -231,7 +231,8 @@ const ProjectsEditPage = () => {
     setUploadMode(mode);
     setSlotInputResetKey((prev) => prev + 1);
     if (mode === "horizontal") {
-      setSlotFiles({ 0: null });
+      const nextOrder = Math.max(getCurrentMaxGalleryOrder() + 1, 0);
+      setSlotFiles({ [nextOrder]: null });
     } else {
       const maxOrder = getCurrentMaxGalleryOrder();
       const hasInitialVerticalOrders = gallery.some((item) => {
@@ -302,7 +303,8 @@ const ProjectsEditPage = () => {
         if (!file) continue;
         const order = Number(orderKey);
         const timestamp = Date.now();
-        const fileName = `project-gallery-${timestamp}-${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
+        const modeTag = uploadMode === "horizontal" ? "horizontal" : "vertical";
+        const fileName = `project-gallery-${modeTag}-${timestamp}-${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
         
         const { data: uploadData, error: uploadError } = await storageUtils.uploadFile(file, fileName);
         if (uploadError) throw uploadError;
@@ -342,7 +344,8 @@ const ProjectsEditPage = () => {
       });
       
       if (uploadMode === "horizontal") {
-        setSlotFiles({ 0: null });
+        const nextOrder = Math.max(getCurrentMaxGalleryOrder() + 1, 0);
+        setSlotFiles({ [nextOrder]: null });
       } else if (uploadMode === "vertical") {
         setSlotFiles({});
       }
@@ -594,13 +597,77 @@ const ProjectsEditPage = () => {
     return [...gallery].sort((a, b) => (parseInt(a.sort) || 0) - (parseInt(b.sort) || 0));
   }, [gallery]);
 
-  const horizontalGalleryItem = useMemo(() => {
-    return sortedGallery.find((item) => (parseInt(item.sort) || 0) === 0) || null;
-  }, [sortedGallery]);
+  const isHorizontalLayoutImage = (imagePath: string) => imagePath.includes("project-gallery-horizontal-");
+  const isVerticalLayoutImage = (imagePath: string) => imagePath.includes("project-gallery-vertical-");
+  const hasTaggedLayout = useMemo(
+    () => sortedGallery.some((item) => isHorizontalLayoutImage(item.image_path || "") || isVerticalLayoutImage(item.image_path || "")),
+    [sortedGallery]
+  );
 
-  const verticalRows = useMemo(() => {
+  const previewBlocks = useMemo(() => {
+    if (hasTaggedLayout) {
+      const blocks: Array<
+        | { type: "horizontal"; order: number; item: any }
+        | { type: "vertical"; order: number; leftOrder: number; rightOrder: number; leftItem: any | null; rightItem: any | null }
+      > = [];
+
+      for (let i = 0; i < sortedGallery.length; i++) {
+        const item = sortedGallery[i];
+        const order = parseInt(item.sort) || 0;
+        const path = item.image_path || "";
+
+        if (isHorizontalLayoutImage(path)) {
+          blocks.push({ type: "horizontal", order, item });
+          continue;
+        }
+
+        if (isVerticalLayoutImage(path)) {
+          const next = sortedGallery[i + 1];
+          const nextOrder = next ? parseInt(next.sort) || 0 : null;
+          const nextIsVertical = next ? isVerticalLayoutImage(next.image_path || "") : false;
+
+          if (next && nextIsVertical && nextOrder === order + 1) {
+            blocks.push({
+              type: "vertical",
+              order,
+              leftOrder: order,
+              rightOrder: order + 1,
+              leftItem: item,
+              rightItem: next,
+            });
+            i++;
+          } else {
+            const isEven = order % 2 === 0;
+            blocks.push({
+              type: "vertical",
+              order: isEven ? order : order - 1,
+              leftOrder: isEven ? order : order - 1,
+              rightOrder: isEven ? order + 1 : order,
+              leftItem: isEven ? item : null,
+              rightItem: isEven ? null : item,
+            });
+          }
+          continue;
+        }
+
+        // Eski etiketsiz kayıtlarda satır akışını bozmamak için yatay fallback
+        blocks.push({ type: "horizontal", order, item });
+      }
+
+      return blocks.sort((a, b) => a.order - b.order);
+    }
+
+    // Legacy fallback: order 0 yatay, sonrası dikey çiftler
+    const blocks: Array<
+      | { type: "horizontal"; order: number; item: any }
+      | { type: "vertical"; order: number; leftOrder: number; rightOrder: number; leftItem: any | null; rightItem: any | null }
+    > = [];
+    const horizontal = sortedGallery.find((item) => (parseInt(item.sort) || 0) === 0);
+    if (horizontal) {
+      blocks.push({ type: "horizontal", order: 0, item: horizontal });
+    }
+
     const rowStarts = new Set<number>();
-
     sortedGallery
       .filter((item) => (parseInt(item.sort) || 0) >= 2)
       .forEach((item) => {
@@ -608,23 +675,32 @@ const ProjectsEditPage = () => {
         rowStarts.add(order % 2 === 0 ? order : order - 1);
       });
 
-    return Array.from(rowStarts)
+    Array.from(rowStarts)
       .sort((a, b) => a - b)
-      .map((startOrder) => ({
-        startOrder,
-        leftItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder) || null,
-        rightItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder + 1) || null,
-      }));
-  }, [sortedGallery]);
+      .forEach((startOrder) => {
+        blocks.push({
+          type: "vertical",
+          order: startOrder,
+          leftOrder: startOrder,
+          rightOrder: startOrder + 1,
+          leftItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder) || null,
+          rightItem: sortedGallery.find((item) => (parseInt(item.sort) || 0) === startOrder + 1) || null,
+        });
+      });
+
+    return blocks;
+  }, [sortedGallery, hasTaggedLayout]);
 
   const renderGalleryCard = (img: any, idx: number) => {
     const imageUrl = getImageUrl(img.image_path || "");
     const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(img.image_path || "");
+    const isVerticalCard = (img.image_path || "").includes("project-gallery-vertical-");
+    const previewHeightClass = isVerticalCard ? "h-80" : "h-40";
 
     return (
       <div key={img.id || idx} className="relative group flex flex-col">
         {isVideo ? (
-          <div className="w-full h-40 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 text-sm relative overflow-hidden">
+          <div className={`w-full ${previewHeightClass} bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 text-sm relative overflow-hidden`}>
             <span>🎥 Video</span>
             <video
               src={imageUrl}
@@ -643,7 +719,7 @@ const ProjectsEditPage = () => {
           <img
             src={imageUrl}
             alt={`galeri-${idx}`}
-            className="w-full h-40 object-cover rounded-lg border border-gray-300"
+            className={`w-full ${previewHeightClass} object-cover rounded-lg border border-gray-300`}
             onError={(e) => {
               e.currentTarget.src = getFallbackImageUrl();
             }}
@@ -696,75 +772,79 @@ const ProjectsEditPage = () => {
   return (
     <FormLayout title="Projeyi Düzenle" backUrl="/admin/projects">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Banner Preview */}
-        {project.banner_media && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mevcut Banner:</label>
-            {/\.(mp4|webm|ogg|mov)$/i.test(project.banner_media) ? (
-              <div className="w-full max-w-md h-48 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600">
-                🎥 Video Banner
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            {project.banner_media && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mevcut Banner:</label>
+                {/\.(mp4|webm|ogg|mov)$/i.test(project.banner_media) ? (
+                  <div className="w-full h-48 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600">
+                    🎥 Video Banner
+                  </div>
+                ) : (
+                  <img
+                    src={getImageUrl(project.banner_media)}
+                    alt="Banner"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                    onError={(e) => {
+                      e.currentTarget.src = getFallbackImageUrl();
+                    }}
+                  />
+                )}
               </div>
-            ) : (
-              <img
-                src={getImageUrl(project.banner_media)}
-                alt="Banner"
-                className="w-full max-w-md h-48 object-cover rounded-lg border border-gray-300"
-                onError={(e) => {
-                  e.currentTarget.src = getFallbackImageUrl();
-                }}
-              />
             )}
+            <FormFileInput
+              label="Desktop Banner (Görsel veya Video)"
+              accept="image/*,video/*"
+              onChange={handleBannerChange}
+              helperText={newBanner ? `Yeni seçilen: ${newBanner.name}` : "Proje için desktop banner görseli veya video yükleyin"}
+            />
           </div>
-        )}
 
-        <FormFileInput
-          label="Desktop Banner (Görsel veya Video)"
-          accept="image/*,video/*"
-          onChange={handleBannerChange}
-          helperText={newBanner ? `Yeni seçilen: ${newBanner.name}` : "Proje için desktop banner görseli veya video yükleyin"}
-        />
-
-        {/* Mobile Banner Preview */}
-        {project.mobile_image_url && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mevcut Mobile Banner:</label>
-            {/\.(mp4|webm|ogg|mov)$/i.test(project.mobile_image_url) ? (
-              <div className="w-full max-w-md h-48 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600">
-                🎥 Video Mobile Banner
+          <div className="space-y-4">
+            {project.mobile_image_url && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mevcut Mobile Banner:</label>
+                {/\.(mp4|webm|ogg|mov)$/i.test(project.mobile_image_url) ? (
+                  <div className="w-full h-48 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600">
+                    🎥 Video Mobile Banner
+                  </div>
+                ) : (
+                  <img
+                    src={getImageUrl(project.mobile_image_url)}
+                    alt="Mobile Banner"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                    onError={(e) => {
+                      e.currentTarget.src = getFallbackImageUrl();
+                    }}
+                  />
+                )}
               </div>
-            ) : (
-              <img
-                src={getImageUrl(project.mobile_image_url)}
-                alt="Mobile Banner"
-                className="w-full max-w-md h-48 object-cover rounded-lg border border-gray-300"
-                onError={(e) => {
-                  e.currentTarget.src = getFallbackImageUrl();
-                }}
-              />
             )}
+            <FormFileInput
+              label="Mobile Banner (Görsel veya Video)"
+              accept="image/*,video/*"
+              onChange={handleMobileBannerChange}
+              helperText={newMobileBanner ? `Yeni seçilen: ${newMobileBanner.name}` : "Proje için mobile banner görseli veya video yükleyin (opsiyonel)"}
+            />
           </div>
-        )}
+        </div>
 
-        <FormFileInput
-          label="Mobile Banner (Görsel veya Video)"
-          accept="image/*,video/*"
-          onChange={handleMobileBannerChange}
-          helperText={newMobileBanner ? `Yeni seçilen: ${newMobileBanner.name}` : "Proje için mobile banner görseli veya video yükleyin (opsiyonel)"}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormInput
+            label="Başlık"
+            value={title}
+            onChange={(value) => setTitle(value)}
+            required
+          />
 
-        <FormInput
-          label="Başlık"
-          value={title}
-          onChange={(value) => setTitle(value)}
-          required
-        />
-
-        <FormInput
-          label="Alt Başlık"
-          value={subtitle}
-          onChange={(value) => setSubtitle(value)}
-          required
-        />
+          <FormInput
+            label="Alt Başlık"
+            value={subtitle}
+            onChange={(value) => setSubtitle(value)}
+            required
+          />
+        </div>
 
         <FormInput
           label="Slug"
@@ -781,31 +861,33 @@ const ProjectsEditPage = () => {
           rows={5}
         />
 
-        <FormInput
-          label="Dış Bağlantı (External Link)"
-          type="url"
-          value={externalLink}
-          onChange={(value) => setExternalLink(value)}
-          placeholder="https://..."
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormInput
+            label="Dış Bağlantı (External Link)"
+            type="url"
+            value={externalLink}
+            onChange={(value) => setExternalLink(value)}
+            placeholder="https://..."
+          />
 
-        <FormInput
-          label="Müşteri (Client)"
-          value={clientName}
-          onChange={(value) => setClientName(value)}
-        />
+          <FormInput
+            label="Müşteri (Client)"
+            value={clientName}
+            onChange={(value) => setClientName(value)}
+          />
 
-        <FormInput
-          label="Tab 1"
-          value={tab1}
-          onChange={(value) => setTab1(value)}
-        />
+          <FormInput
+            label="Tab 1"
+            value={tab1}
+            onChange={(value) => setTab1(value)}
+          />
 
-        <FormInput
-          label="Tab 2"
-          value={tab2}
-          onChange={(value) => setTab2(value)}
-        />
+          <FormInput
+            label="Tab 2"
+            value={tab2}
+            onChange={(value) => setTab2(value)}
+          />
+        </div>
 
         <FormMultiSelect
           label="Project Tabs (Kategoriler)"
@@ -815,23 +897,25 @@ const ProjectsEditPage = () => {
           helperText="Projenin hangi kategorilere ait olduğunu seçin (birden fazla seçim yapabilirsiniz)"
         />
 
-        <FormSelect
-          label="Featured (Anasayfada Göster)"
-          value={project?.is_featured ? "true" : "false"}
-          onChange={(value) => setProject(prev => prev ? {...prev, is_featured: value === "true"} : null)}
-          options={[
-            { value: "false", label: "Hayır" },
-            { value: "true", label: "Evet" }
-          ]}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormSelect
+            label="Featured (Anasayfada Göster)"
+            value={project?.is_featured ? "true" : "false"}
+            onChange={(value) => setProject(prev => prev ? {...prev, is_featured: value === "true"} : null)}
+            options={[
+              { value: "false", label: "Hayır" },
+              { value: "true", label: "Evet" }
+            ]}
+          />
 
-        <FormInput
-          label="Featured Sırası"
-          type="number"
-          value={String(project?.featured_order || 0)}
-          onChange={(value) => setProject(prev => prev ? {...prev, featured_order: parseInt(value) || 0} : null)}
-          helperText="Anasayfada gösterim sırası (sayı ne kadar küçükse o kadar üstte görünür)"
-        />
+          <FormInput
+            label="Featured Sırası"
+            type="number"
+            value={String(project?.featured_order || 0)}
+            onChange={(value) => setProject(prev => prev ? {...prev, featured_order: parseInt(value) || 0} : null)}
+            helperText="Anasayfada gösterim sırası (sayı ne kadar küçükse o kadar üstte görünür)"
+          />
+        </div>
 
         <FormActions>
           <FormButton type="submit" variant="primary">
@@ -844,182 +928,163 @@ const ProjectsEditPage = () => {
 
       <h2 className="text-xl text-black font-semibold mb-4">Galeri Görselleri</h2>
 
-      <div className="mb-4">
-        <div className="flex flex-wrap gap-3 mb-4">
-          <FormButton
-            type="button"
-            onClick={() => handleSelectUploadMode("horizontal")}
-            variant={uploadMode === "horizontal" ? "primary" : "secondary"}
-          >
-            Yatay Görsel
-          </FormButton>
-          <FormButton
-            type="button"
-            onClick={() => handleSelectUploadMode("vertical")}
-            variant={uploadMode === "vertical" ? "primary" : "secondary"}
-          >
-            Dikey Görsel
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-4">
+        <div>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <FormButton
+              type="button"
+              onClick={() => handleSelectUploadMode("horizontal")}
+              variant={uploadMode === "horizontal" ? "primary" : "secondary"}
+            >
+              Yatay Gorsel
+            </FormButton>
+            <FormButton
+              type="button"
+              onClick={() => handleSelectUploadMode("vertical")}
+              variant={uploadMode === "vertical" ? "primary" : "secondary"}
+            >
+              Dikey Gorsel
+            </FormButton>
+          </div>
+
+          {uploadMode === "horizontal" && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0] ?? "-"} (Yatay)
+              </label>
+              <input
+                key={`horizontal-${slotInputResetKey}`}
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => {
+                  const horizontalOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                  if (typeof horizontalOrder === "number") {
+                    handleSlotFileChange(horizontalOrder, e.target.files?.[0] || null);
+                  }
+                }}
+                className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-sm text-gray-600 mt-2">
+                {(() => {
+                  const horizontalOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                  if (typeof horizontalOrder !== "number" || !slotFiles[horizontalOrder]) return "Dosya seçilmedi";
+                  return `Seçilen: ${slotFiles[horizontalOrder]?.name}`;
+                })()}
+              </p>
+            </div>
+          )}
+
+          {uploadMode === "vertical" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0] ?? "-"} (Sol)
+                </label>
+                <input
+                  key={`vertical-left-${slotInputResetKey}`}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={(e) => {
+                    const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                    if (typeof firstOrder === "number") {
+                      handleSlotFileChange(firstOrder, e.target.files?.[0] || null);
+                    }
+                  }}
+                  className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-sm text-gray-600 mt-2">
+                  {(() => {
+                  const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
+                  if (typeof firstOrder !== "number" || !slotFiles[firstOrder]) return "Dosya seçilmedi";
+                  return `Seçilen: ${slotFiles[firstOrder]?.name}`;
+                  })()}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1] ?? "-"} (Sağ)
+                </label>
+                <input
+                  key={`vertical-right-${slotInputResetKey}`}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={(e) => {
+                    const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
+                    if (typeof secondOrder === "number") {
+                      handleSlotFileChange(secondOrder, e.target.files?.[0] || null);
+                    }
+                  }}
+                  className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-sm text-gray-600 mt-2">
+                  {(() => {
+                  const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
+                  if (typeof secondOrder !== "number" || !slotFiles[secondOrder]) return "Dosya seçilmedi";
+                  return `Seçilen: ${slotFiles[secondOrder]?.name}`;
+                  })()}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <FormButton type="button" onClick={handleGalleryUpload} variant="primary">
+            Galeri Yükle
           </FormButton>
         </div>
 
-        {uploadMode === "horizontal" && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Order 0 (Yatay)</label>
-            <input
-              key={`horizontal-0-${slotInputResetKey}`}
-              type="file"
-              accept="image/*,video/*"
-              onChange={(e) => handleSlotFileChange(0, e.target.files?.[0] || null)}
-              className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            <p className="text-sm text-gray-600 mt-2">
-              {slotFiles[0] ? `Seçilen: ${slotFiles[0]?.name}` : "Dosya seçilmedi"}
-            </p>
-          </div>
-        )}
-
-        {uploadMode === "vertical" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0] ?? "-"} (Sol)
-              </label>
-              <input
-                key={`vertical-left-${slotInputResetKey}`}
-                type="file"
-                accept="image/*,video/*"
-                onChange={(e) => {
-                  const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
-                  if (typeof firstOrder === "number") {
-                    handleSlotFileChange(firstOrder, e.target.files?.[0] || null);
-                  }
-                }}
-                className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-sm text-gray-600 mt-2">
-                {(() => {
-                const firstOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[0];
-                if (typeof firstOrder !== "number" || !slotFiles[firstOrder]) return "Dosya seçilmedi";
-                return `Seçilen: ${slotFiles[firstOrder]?.name}`;
-                })()}
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order {Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1] ?? "-"} (Sağ)
-              </label>
-              <input
-                key={`vertical-right-${slotInputResetKey}`}
-                type="file"
-                accept="image/*,video/*"
-                onChange={(e) => {
-                  const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
-                  if (typeof secondOrder === "number") {
-                    handleSlotFileChange(secondOrder, e.target.files?.[0] || null);
-                  }
-                }}
-                className="w-full px-4 py-3 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-sm text-gray-600 mt-2">
-                {(() => {
-                const secondOrder = Object.keys(slotFiles).map(Number).sort((a, b) => a - b)[1];
-                if (typeof secondOrder !== "number" || !slotFiles[secondOrder]) return "Dosya seçilmedi";
-                return `Seçilen: ${slotFiles[secondOrder]?.name}`;
-                })()}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <FormButton type="button" onClick={handleGalleryUpload} variant="primary">
-          Galeri Yükle
-        </FormButton>
-      </div>
-
-      <div className="space-y-6 mt-4">
-        {gallery.length > 0 ? (
-          <>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Yatay Slot (Order 0)</h3>
-              {horizontalGalleryItem ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {renderGalleryCard(horizontalGalleryItem, 0)}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500 p-4 border border-dashed border-gray-300 rounded-lg">
-                  Order 0 için görsel yok.
-                  <div className="mt-3">
-                    <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(0)}>
-                      Order 0'a Görsel Yükle
-                    </FormButton>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Dikey Slotlar (2-3, 4-5, 6-7...)</h3>
-              {verticalRows.length > 0 ? (
-                <div className="space-y-4">
-                  {verticalRows.map((row) => (
-                    <div key={row.startOrder} className="p-3 border border-gray-200 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-3">
-                        Satır: {row.startOrder} (sol) - {row.startOrder + 1} (sağ)
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          {row.leftItem ? (
-                            renderGalleryCard(row.leftItem, row.startOrder)
-                          ) : (
-                            <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
-                              <span>Order {row.startOrder} boş</span>
-                              <FormButton
-                                type="button"
-                                variant="secondary"
-                                onClick={() => handleOpenUploadForOrder(row.startOrder)}
-                              >
-                                Bu Slota Yükle
-                              </FormButton>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          {row.rightItem ? (
-                            renderGalleryCard(row.rightItem, row.startOrder + 1)
-                          ) : (
-                            <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
-                              <span>Order {row.startOrder + 1} boş</span>
-                              <FormButton
-                                type="button"
-                                variant="secondary"
-                                onClick={() => handleOpenUploadForOrder(row.startOrder + 1)}
-                              >
-                                Bu Slota Yükle
-                              </FormButton>
-                            </div>
-                          )}
-                        </div>
+        <div className="p-4 border border-gray-200 rounded-lg bg-white">
+          {gallery.length > 0 ? (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-700">On Yuz Onizleme Sirasi (Order'a Gore)</h3>
+              {previewBlocks.map((block, index) => (
+              <div key={`${block.type}-${block.order}-${index}`} className="p-3 border border-gray-200 rounded-lg">
+                {block.type === "horizontal" ? (
+                  <>
+                    <p className="text-xs text-gray-500 mb-3">Yatay - Order {block.order}</p>
+                    {renderGalleryCard(block.item, block.order)}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Dikey Satir - {block.leftOrder} (sol) / {block.rightOrder} (sag)
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        {block.leftItem ? (
+                          renderGalleryCard(block.leftItem, block.leftOrder)
+                        ) : (
+                          <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
+                            <span>Order {block.leftOrder} bos</span>
+                            <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(block.leftOrder)}>
+                              Bu Slota Yukle
+                            </FormButton>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        {block.rightItem ? (
+                          renderGalleryCard(block.rightItem, block.rightOrder)
+                        ) : (
+                          <div className="h-full min-h-40 border border-dashed border-gray-300 gap-4 rounded-lg flex flex-col items-center justify-center text-sm text-gray-400 p-3">
+                            <span>Order {block.rightOrder} bos</span>
+                            <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(block.rightOrder)}>
+                              Bu Slota Yukle
+                            </FormButton>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500 p-4 border border-dashed border-gray-300 rounded-lg">
-                  Henüz dikey slot görseli yok.
-                  <div className="mt-3 flex gap-2">
-                    <FormButton type="button" variant="secondary" onClick={() => handleOpenUploadForOrder(2)}>
-                      2-3 Slotunu Aç
-                    </FormButton>
-                  </div>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
+              ))}
             </div>
-          </>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            Henüz galeri görseli yüklenmemiş.
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Henüz galeri görseli yüklenmemiş.
+            </div>
+          )}
           </div>
-        )}
       </div>
 
       <hr className="my-8 border-gray-300" />
