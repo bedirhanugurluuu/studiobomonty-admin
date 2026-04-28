@@ -20,6 +20,7 @@ export default function RecognitionPage() {
   const [fetching, setFetching] = useState(true);
   const [recognition, setRecognition] = useState<Recognition | null>(null);
   const [title, setTitle] = useState('');
+  const [showRecognition, setShowRecognition] = useState(true);
 
   useEffect(() => {
     setBreadcrumbs([
@@ -42,6 +43,11 @@ export default function RecognitionPage() {
         setRecognition(data as Recognition);
         setTitle(data.title || 'Recognition');
       }
+
+      const { data: aboutData, error: aboutError } = await api.about.get();
+      if (!aboutError && aboutData) {
+        setShowRecognition(aboutData.show_recognition !== false);
+      }
     } catch (error) {
       console.error('Error fetching recognition:', error);
       Swal.fire('Hata', 'Tanınma bilgisi yüklenemedi', 'error');
@@ -62,6 +68,11 @@ export default function RecognitionPage() {
       setLoading(true);
       const { error } = await api.recognition.update({ title });
       if (error) throw error;
+
+      const { error: aboutError } = await api.about.update({
+        show_recognition: showRecognition,
+      });
+      if (aboutError) throw aboutError;
 
       Swal.fire('Başarılı', 'Tanınma başlığı başarıyla güncellendi', 'success');
       fetchRecognition();
@@ -99,6 +110,16 @@ export default function RecognitionPage() {
           placeholder="Tanınma"
           required
         />
+
+        <label className="label cursor-pointer justify-start gap-3 border rounded-lg p-4">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-primary border border-gray-700"
+            checked={showRecognition}
+            onChange={(e) => setShowRecognition(e.target.checked)}
+          />
+          <span className="label-text font-medium text-[#121820]">Ön yüzde Tanınma bölümünü göster</span>
+        </label>
 
         <div className="flex gap-4">
           <FormButton type="submit" loading={loading}>

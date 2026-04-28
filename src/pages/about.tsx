@@ -10,6 +10,16 @@ interface AboutContent {
   title: string;
   subtitle: string;
   main_text: string;
+  about_us_text?: string;
+  refined_values_title?: string;
+  refined_value_1?: string;
+  refined_value_2?: string;
+  refined_value_3?: string;
+  refined_value_4?: string;
+  refined_value_5?: string;
+  refined_value_6?: string;
+  show_recognition?: boolean;
+  show_clients?: boolean;
   image_path?: string;
 }
 
@@ -18,6 +28,16 @@ export default function AboutPage() {
     title: "",
     subtitle: "",
     main_text: "",
+    about_us_text: "",
+    refined_values_title: "",
+    refined_value_1: "",
+    refined_value_2: "",
+    refined_value_3: "",
+    refined_value_4: "",
+    refined_value_5: "",
+    refined_value_6: "",
+    show_recognition: true,
+    show_clients: true,
     image_path: "",
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -40,6 +60,16 @@ export default function AboutPage() {
           title: data.title || "",
           subtitle: data.subtitle || "",
           main_text: data.main_text || "",
+          about_us_text: data.about_us_text || "",
+          refined_values_title: data.refined_values_title || "",
+          refined_value_1: data.refined_value_1 || "",
+          refined_value_2: data.refined_value_2 || "",
+          refined_value_3: data.refined_value_3 || "",
+          refined_value_4: data.refined_value_4 || "",
+          refined_value_5: data.refined_value_5 || "",
+          refined_value_6: data.refined_value_6 || "",
+          show_recognition: data.show_recognition !== false,
+          show_clients: data.show_clients !== false,
           image_path: data.image_path || "",
         });
         setGlobalLoading(false);
@@ -87,6 +117,16 @@ export default function AboutPage() {
         title: content.title || "",
         subtitle: content.subtitle || "",
         main_text: content.main_text || "",
+        about_us_text: content.about_us_text || "",
+        refined_values_title: content.refined_values_title || "",
+        refined_value_1: content.refined_value_1 || "",
+        refined_value_2: content.refined_value_2 || "",
+        refined_value_3: content.refined_value_3 || "",
+        refined_value_4: content.refined_value_4 || "",
+        refined_value_5: content.refined_value_5 || "",
+        refined_value_6: content.refined_value_6 || "",
+        show_recognition: content.show_recognition !== false,
+        show_clients: content.show_clients !== false,
         image_path: newImagePath,
       };
 
@@ -185,6 +225,90 @@ export default function AboutPage() {
               Yeni seçilen: {imageFile.name}
             </p>
           )}
+        </div>
+
+        {/* About Us Yazısı */}
+        <div className="card bg-base-100 shadow-lg p-6">
+          <h2 className="text-xl font-bold mb-4">About Us Yazısı</h2>
+          <textarea
+            value={content.about_us_text || ""}
+            onChange={(e) => setContent({ ...content, about_us_text: e.target.value })}
+            className="textarea textarea-bordered w-full h-40 p-2"
+            placeholder="About us bölümünde görünecek uzun metni buraya yazın..."
+            required
+          />
+        </div>
+
+        {/* Refined Studio Bomonty Values */}
+        <div className="card bg-base-100 shadow-lg p-6">
+          <h2 className="text-xl font-bold mb-4">Refined Values</h2>
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">Sol Başlık</label>
+            <input
+              type="text"
+              value={content.refined_values_title || ""}
+              onChange={(e) => setContent({ ...content, refined_values_title: e.target.value })}
+              className="input input-bordered w-full"
+              placeholder="REFINED STUDIO BOMONTY VALUES"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">01 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_1 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_1: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">02 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_2 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_2: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">03 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_3 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_3: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">04 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_4 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_4: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">05 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_5 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_5: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">06 Başlık Metni</label>
+              <textarea
+                value={content.refined_value_6 || ""}
+                onChange={(e) => setContent({ ...content, refined_value_6: e.target.value })}
+                className="textarea textarea-bordered w-full h-24 p-2"
+                required
+              />
+            </div>
+          </div>
         </div>
 
         {/* Kaydet Butonu */}

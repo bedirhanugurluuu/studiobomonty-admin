@@ -58,6 +58,10 @@
     padding: 0;
   }
 
+  textarea {
+    background-color: #121820;
+  }
+
   /* DaisyUI button styles */
   .btn {
     display: inline-flex;

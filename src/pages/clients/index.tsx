@@ -20,6 +20,7 @@ export default function ClientsPage() {
   const [fetching, setFetching] = useState(true);
   const [clientsSettings, setClientsSettings] = useState<ClientsSettings | null>(null);
   const [title, setTitle] = useState('');
+  const [showClients, setShowClients] = useState(true);
 
   useEffect(() => {
     setBreadcrumbs([
@@ -42,6 +43,11 @@ export default function ClientsPage() {
         setClientsSettings(data as ClientsSettings);
         setTitle(data.title || 'Clients');
       }
+
+      const { data: aboutData, error: aboutError } = await api.about.get();
+      if (!aboutError && aboutData) {
+        setShowClients(aboutData.show_clients !== false);
+      }
     } catch (error) {
       console.error('Error fetching clients settings:', error);
       Swal.fire('Hata', 'Müşteriler ayarları yüklenemedi', 'error');
@@ -62,6 +68,11 @@ export default function ClientsPage() {
       setLoading(true);
       const { error } = await api.clients.update({ title });
       if (error) throw error;
+
+      const { error: aboutError } = await api.about.update({
+        show_clients: showClients,
+      });
+      if (aboutError) throw aboutError;
 
       Swal.fire('Başarılı', 'Müşteriler başlığı başarıyla güncellendi', 'success');
       fetchClientsSettings();
@@ -99,6 +110,16 @@ export default function ClientsPage() {
           placeholder="Clients"
           required
         />
+
+        <label className="label cursor-pointer justify-start gap-3 border rounded-lg p-4">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-primary border border-gray-700"
+            checked={showClients}
+            onChange={(e) => setShowClients(e.target.checked)}
+          />
+          <span className="label-text font-medium text-[#121820]">Ön yüzde Müşteriler bölümünü göster</span>
+        </label>
 
         <div className="flex gap-4">
           <FormButton type="submit" loading={loading}>
