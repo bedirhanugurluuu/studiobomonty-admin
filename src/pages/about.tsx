@@ -18,6 +18,12 @@ interface AboutContent {
   refined_value_4?: string;
   refined_value_5?: string;
   refined_value_6?: string;
+  refined_value_image_1?: string;
+  refined_value_image_2?: string;
+  refined_value_image_3?: string;
+  refined_value_image_4?: string;
+  refined_value_image_5?: string;
+  refined_value_image_6?: string;
   show_recognition?: boolean;
   show_clients?: boolean;
   image_path?: string;
@@ -36,11 +42,25 @@ export default function AboutPage() {
     refined_value_4: "",
     refined_value_5: "",
     refined_value_6: "",
+    refined_value_image_1: "",
+    refined_value_image_2: "",
+    refined_value_image_3: "",
+    refined_value_image_4: "",
+    refined_value_image_5: "",
+    refined_value_image_6: "",
     show_recognition: true,
     show_clients: true,
     image_path: "",
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [refinedImageFiles, setRefinedImageFiles] = useState<Record<number, File | null>>({
+    1: null,
+    2: null,
+    3: null,
+    4: null,
+    5: null,
+    6: null,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const { setBreadcrumbs, setIsLoading: setGlobalLoading } = useBreadcrumb();
 
@@ -68,6 +88,12 @@ export default function AboutPage() {
           refined_value_4: data.refined_value_4 || "",
           refined_value_5: data.refined_value_5 || "",
           refined_value_6: data.refined_value_6 || "",
+          refined_value_image_1: data.refined_value_image_1 || "",
+          refined_value_image_2: data.refined_value_image_2 || "",
+          refined_value_image_3: data.refined_value_image_3 || "",
+          refined_value_image_4: data.refined_value_image_4 || "",
+          refined_value_image_5: data.refined_value_image_5 || "",
+          refined_value_image_6: data.refined_value_image_6 || "",
           show_recognition: data.show_recognition !== false,
           show_clients: data.show_clients !== false,
           image_path: data.image_path || "",
@@ -87,6 +113,14 @@ export default function AboutPage() {
 
     try {
       let newImagePath = content.image_path;
+      const refinedImagePaths: Record<number, string> = {
+        1: content.refined_value_image_1 || "",
+        2: content.refined_value_image_2 || "",
+        3: content.refined_value_image_3 || "",
+        4: content.refined_value_image_4 || "",
+        5: content.refined_value_image_5 || "",
+        6: content.refined_value_image_6 || "",
+      };
 
       // Yeni resim yüklendiyse
       if (imageFile) {
@@ -113,6 +147,24 @@ export default function AboutPage() {
         console.log('=== ABOUT RESİM İŞLEMİ BİTTİ ===');
       }
 
+      for (let i = 1; i <= 6; i++) {
+        const selectedFile = refinedImageFiles[i];
+        if (!selectedFile) continue;
+
+        const currentPath = refinedImagePaths[i];
+        if (currentPath) {
+          await storageUtils.deleteFile(currentPath);
+        }
+
+        const timestamp = Date.now();
+        const extension = selectedFile.name.split(".").pop() || "jpg";
+        const fileName = `about-refined-${i}-${timestamp}-${Math.random().toString(36).substring(2)}.${extension}`;
+        const { error: uploadError } = await storageUtils.uploadFile(selectedFile, fileName);
+        if (uploadError) throw uploadError;
+
+        refinedImagePaths[i] = fileName;
+      }
+
       const updateData = {
         title: content.title || "",
         subtitle: content.subtitle || "",
@@ -125,6 +177,12 @@ export default function AboutPage() {
         refined_value_4: content.refined_value_4 || "",
         refined_value_5: content.refined_value_5 || "",
         refined_value_6: content.refined_value_6 || "",
+        refined_value_image_1: refinedImagePaths[1],
+        refined_value_image_2: refinedImagePaths[2],
+        refined_value_image_3: refinedImagePaths[3],
+        refined_value_image_4: refinedImagePaths[4],
+        refined_value_image_5: refinedImagePaths[5],
+        refined_value_image_6: refinedImagePaths[6],
         show_recognition: content.show_recognition !== false,
         show_clients: content.show_clients !== false,
         image_path: newImagePath,
@@ -140,6 +198,7 @@ export default function AboutPage() {
         timer: 2000,
         showConfirmButton: false,
       });
+      setRefinedImageFiles({ 1: null, 2: null, 3: null, 4: null, 5: null, 6: null });
     } catch (err) {
       console.error("Güncelleme hatası:", err);
       Swal.fire({
@@ -156,6 +215,40 @@ export default function AboutPage() {
     if (e.target.files && e.target.files[0]) {
       setImageFile(e.target.files[0]);
     }
+  };
+
+  const handleRefinedImageChange = (index: number, file: File | null) => {
+    setRefinedImageFiles((prev) => ({ ...prev, [index]: file }));
+  };
+
+  const handleDeleteRefinedImage = async (index: number) => {
+    const key = `refined_value_image_${index}` as keyof AboutContent;
+    const currentPath = (content[key] as string) || "";
+    if (!currentPath) return;
+
+    const confirm = await Swal.fire({
+      icon: "warning",
+      title: "Görsel silinsin mi?",
+      text: `${index.toString().padStart(2, "0")} başlığına ait görsel silinecek.`,
+      showCancelButton: true,
+      confirmButtonText: "Evet, sil",
+      cancelButtonText: "Vazgeç",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    const { error } = await storageUtils.deleteFile(currentPath);
+    if (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Hata!",
+        text: "Görsel storage'dan silinemedi.",
+      });
+      return;
+    }
+
+    setContent((prev) => ({ ...prev, [key]: "" }));
+    setRefinedImageFiles((prev) => ({ ...prev, [index]: null }));
   };
 
   return (
@@ -254,25 +347,69 @@ export default function AboutPage() {
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">01 Başlık Metni</label>
               <textarea
                 value={content.refined_value_1 || ""}
                 onChange={(e) => setContent({ ...content, refined_value_1: e.target.value })}
-                className="textarea textarea-bordered w-full h-24 p-2"
+                className="textarea textarea-bordered w-full h-24 p-2 resize-none"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">01 Görsel</label>
+              {content.refined_value_image_1 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_1}`}
+                    alt="Refined value 01"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(1, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[1] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[1]?.name}</p>}
+              {content.refined_value_image_1 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(1)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">02 Başlık Metni</label>
               <textarea
                 value={content.refined_value_2 || ""}
                 onChange={(e) => setContent({ ...content, refined_value_2: e.target.value })}
-                className="textarea textarea-bordered w-full h-24 p-2"
+                className="textarea textarea-bordered w-full h-24 p-2 resize-none"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">02 Görsel</label>
+              {content.refined_value_image_2 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_2}`}
+                    alt="Refined value 02"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(2, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[2] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[2]?.name}</p>}
+              {content.refined_value_image_2 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(2)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">03 Başlık Metni</label>
               <textarea
                 value={content.refined_value_3 || ""}
@@ -280,33 +417,121 @@ export default function AboutPage() {
                 className="textarea textarea-bordered w-full h-24 p-2"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">03 Görsel</label>
+              {content.refined_value_image_3 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_3}`}
+                    alt="Refined value 03"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(3, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[3] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[3]?.name}</p>}
+              {content.refined_value_image_3 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(3)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">04 Başlık Metni</label>
               <textarea
                 value={content.refined_value_4 || ""}
                 onChange={(e) => setContent({ ...content, refined_value_4: e.target.value })}
-                className="textarea textarea-bordered w-full h-24 p-2"
+                className="textarea textarea-bordered w-full h-24 p-2 resize-none"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">04 Görsel</label>
+              {content.refined_value_image_4 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_4}`}
+                    alt="Refined value 04"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(4, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[4] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[4]?.name}</p>}
+              {content.refined_value_image_4 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(4)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">05 Başlık Metni</label>
               <textarea
                 value={content.refined_value_5 || ""}
                 onChange={(e) => setContent({ ...content, refined_value_5: e.target.value })}
-                className="textarea textarea-bordered w-full h-24 p-2"
+                className="textarea textarea-bordered w-full h-24 p-2 resize-none"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">05 Görsel</label>
+              {content.refined_value_image_5 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_5}`}
+                    alt="Refined value 05"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(5, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[5] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[5]?.name}</p>}
+              {content.refined_value_image_5 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(5)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
-            <div>
+            <div className="p-4 bg-base-200 rounded-lg">
               <label className="block text-sm font-medium mb-2">06 Başlık Metni</label>
               <textarea
                 value={content.refined_value_6 || ""}
                 onChange={(e) => setContent({ ...content, refined_value_6: e.target.value })}
-                className="textarea textarea-bordered w-full h-24 p-2"
+                className="textarea textarea-bordered w-full h-24 p-2 resize-none"
                 required
               />
+              <label className="block text-sm font-medium mt-3 mb-2">06 Görsel</label>
+              {content.refined_value_image_6 && (
+                <div className="mb-2">
+                  <img
+                    src={`https://hyjzyillgvjuuuktfqum.supabase.co/storage/v1/object/public/uploads/${content.refined_value_image_6}`}
+                    alt="Refined value 06"
+                    className="w-full max-w-xs h-32 object-cover rounded border"
+                  />
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleRefinedImageChange(6, e.target.files?.[0] || null)}
+                className="file-input file-input-bordered w-full"
+              />
+              {refinedImageFiles[6] && <p className="text-xs mt-1">Seçilen: {refinedImageFiles[6]?.name}</p>}
+              {content.refined_value_image_6 && (
+                <button type="button" className="btn btn-sm btn-outline btn-error mt-2" onClick={() => handleDeleteRefinedImage(6)}>
+                  Görseli Sil
+                </button>
+              )}
             </div>
           </div>
         </div>
